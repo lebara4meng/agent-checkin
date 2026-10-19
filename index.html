@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D1157">
+  <title>Agent Check-In</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Brand colour comes from the BRAND block in the script below (via the --brand CSS variable).
+    tailwind.config = { theme: { extend: { colors: { brand: 'rgb(var(--brand) / <alpha-value>)' } } } };
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    :root { --brand: 36 46 224; --g1: #E100B5; --g2: #0D1157; --g3: #242EE0; }
+    .bg-grad { background-color: var(--g2); background-image: linear-gradient(110deg, var(--g1) 0%, var(--g2) 55%, var(--g3) 100%); }
+    /* White page: give white cards a soft outline so they still stand out */
+    #appView .bg-white.rounded-2xl, #appView .bg-white.rounded-3xl { border: 1px solid #e9ecf3; }
+    body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
+    .spinner { width: 48px; height: 48px; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .9s linear infinite; }
+    .spinner-dark { width: 26px; height: 26px; border: 3px solid rgba(15,23,42,.12); border-top-color: #0f172a; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pop { 0% { transform: scale(.6); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+    .pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1) both; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .slide-up { animation: slideUp .28s ease-out both; }
+    @keyframes shake { 10%,90% { transform: translateX(-2px) } 20%,80% { transform: translateX(4px) } 30%,50%,70% { transform: translateX(-8px) } 40%,60% { transform: translateX(8px) } }
+    .shake { animation: shake .45s both; }
+    .key { user-select: none; touch-action: manipulation; }
+    .pin { width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+    .pin span { transform: rotate(45deg); color: #fff; font: 800 9px/1 system-ui, sans-serif; letter-spacing: -.02em; }
+    .leaflet-container { font: inherit; background: #e2e8f0; }
+    .leaflet-control-attribution { font-size: 9px !important; }
+    .leaflet-popup-content { margin: 10px 12px; }
+    .nav-safe { padding-bottom: max(env(safe-area-inset-bottom), 8px); }
+    .tab-on { color: rgb(var(--brand)); }
+    .tab-on .tab-dot { opacity: 1; }
+  </style>
+</head>
+<body class="bg-white min-h-screen text-slate-800 antialiased">
+
+<!-- ======================= LOGIN ======================= -->
+<section id="loginView" class="hidden max-w-md mx-auto min-h-screen flex flex-col bg-grad text-white">
+  <div class="flex-1 flex flex-col items-center justify-center px-6 pt-10">
+    <div id="loginLogo" class="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mb-5 overflow-hidden">
+      <svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-6.2-7-11.5A7 7 0 0112 2.5a7 7 0 017 7C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+    </div>
+    <p id="appTag" class="text-[11px] uppercase tracking-[.25em] text-white/60">Field Attendance</p>
+    <h1 id="appName" class="text-2xl font-bold mt-1">Agent Check-In</h1>
+    <p class="text-white/60 text-sm mt-6">Enter your 4-digit PIN</p>
+    <div id="dots" class="flex gap-4 mt-4 h-5 items-center">
+      <span class="dot w-4 h-4 rounded-full border-2 border-slate-400"></span>
+      <span class="dot w-4 h-4 rounded-full border-2 border-slate-400"></span>
+      <span class="dot w-4 h-4 rounded-full border-2 border-slate-400"></span>
+      <span class="dot w-4 h-4 rounded-full border-2 border-slate-400"></span>
+    </div>
+    <p id="loginMsg" class="text-sm text-rose-300 mt-4 min-h-[20px] text-center px-4"></p>
+  </div>
+  <div id="keypad" class="grid grid-cols-3 gap-3 px-8 pb-10 pt-2"></div>
+  <div id="httpsWarn" class="hidden mx-6 mb-6 bg-amber-100 text-amber-900 text-sm rounded-xl p-3">
+    GPS and camera need a secure (https://) link. Open this app from its https address.
+  </div>
+</section>
+
+<!-- ======================= APP ======================= -->
+<section id="appView" class="hidden max-w-md mx-auto min-h-screen bg-white pb-24">
+  <header class="bg-grad text-white px-4 pt-4 pb-4 sticky top-0 z-[500] shadow-md">
+    <div class="flex items-center gap-3">
+      <div id="hdrAvatar" class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center font-bold overflow-hidden shrink-0"></div>
+      <div class="flex-1 min-w-0">
+        <p class="text-xs text-white/60 flex items-center gap-2"><span id="greeting"></span>
+          <span id="netPill" class="hidden text-[10px] font-bold uppercase bg-amber-400 text-amber-950 px-1.5 py-0.5 rounded">Offline</span></p>
+        <p id="hdrName" class="font-bold truncate"></p>
+      </div>
+      <button id="btnRefresh" type="button" aria-label="Refresh" class="w-10 h-10 rounded-xl bg-white/10 active:bg-white/20 flex items-center justify-center">
+        <svg id="refreshIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5.6 15a7 7 0 0011.9 2.4L20 14M4 10l2.5-3.4A7 7 0 0118.4 9"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- HOME -->
+  <div id="view-home" class="view p-4 space-y-4">
+    <div id="queueBanner" class="hidden flex gap-3 items-center bg-sky-50 border border-sky-200 text-sky-900 rounded-2xl p-3.5 text-sm">
+      <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
+      <p id="queueText" class="flex-1"></p>
+      <button id="btnSendNow" type="button" class="shrink-0 bg-sky-600 active:bg-sky-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Send now</button>
+    </div>
+    <div id="qErrBanner" class="hidden flex gap-3 items-start bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl p-3.5 text-sm">
+      <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 8v5m0 3h.01"/></svg>
+      <div id="qErrText" class="flex-1 space-y-1"></div>
+      <button id="btnQErrClose" type="button" class="shrink-0 text-rose-700 text-xl leading-none" aria-label="Dismiss">&times;</button>
+    </div>
+    <div id="missedBanner" class="hidden flex gap-3 items-start bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl p-3.5 text-sm">
+      <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      <p id="missedText"></p>
+    </div>
+
+    <section class="bg-white rounded-3xl shadow-md p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Today</p>
+          <p id="todayDate" class="font-bold"></p>
+        </div>
+        <p id="clock" class="text-2xl font-mono font-semibold tabular-nums text-slate-700">--:--</p>
+      </div>
+
+      <div id="shiftStatus" class="mt-4 flex items-center gap-2 text-sm rounded-xl px-3 py-2.5 bg-slate-100 text-slate-600">
+        <span id="shiftDot" class="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0"></span>
+        <span id="shiftText">Loading…</span>
+      </div>
+
+      <div id="timerBox" class="hidden text-center mt-4">
+        <p class="text-xs text-slate-500">Time on shift</p>
+        <p id="timer" class="text-4xl font-mono font-bold tabular-nums text-emerald-600">00:00:00</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <button id="btnIn" type="button"
+          class="flex flex-col items-center justify-center gap-1 bg-emerald-600 active:bg-emerald-700 text-white font-bold rounded-2xl py-5 shadow-lg shadow-emerald-600/30 transition disabled:opacity-30 disabled:shadow-none">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+          Check In
+        </button>
+        <button id="btnOut" type="button"
+          class="flex flex-col items-center justify-center gap-1 bg-rose-600 active:bg-rose-700 text-white font-bold rounded-2xl py-5 shadow-lg shadow-rose-600/30 transition disabled:opacity-30 disabled:shadow-none">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Check Out
+        </button>
+      </div>
+      <p class="text-center text-[11px] text-slate-400 mt-3">Records your live GPS location and a camera photo.</p>
+    </section>
+
+    <section class="grid grid-cols-3 gap-3">
+      <div class="bg-white rounded-2xl shadow-sm p-3 text-center">
+        <p id="statDays" class="text-2xl font-bold tabular-nums">0</p>
+        <p class="text-[11px] text-slate-500 leading-tight">Days worked<br>this month</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm p-3 text-center">
+        <p id="statShifts" class="text-2xl font-bold tabular-nums">0</p>
+        <p class="text-[11px] text-slate-500 leading-tight">Shifts<br>this month</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm p-3 text-center">
+        <p id="statHours" class="text-2xl font-bold tabular-nums">0</p>
+        <p class="text-[11px] text-slate-500 leading-tight">Hours<br>this month</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="flex items-center justify-between px-1 mb-2">
+        <h3 class="font-bold">Recent shifts</h3>
+        <button type="button" data-goto="history" class="text-sm font-semibold text-indigo-600">See all</button>
+      </div>
+      <div id="recentList" class="space-y-2.5"></div>
+    </section>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="view-history" class="view hidden p-4">
+    <div class="flex items-center justify-between px-1 mb-3">
+      <h2 class="text-lg font-bold">Check-in history</h2>
+      <span id="historyCount" class="text-xs text-slate-500"></span>
+    </div>
+    <div id="historyList" class="space-y-2.5"></div>
+  </div>
+
+  <!-- MAP -->
+  <div id="view-map" class="view hidden relative">
+    <div id="bigMap" class="w-full" style="height: calc(100vh - 148px); height: calc(100dvh - 148px);"></div>
+    <div class="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between gap-2 pointer-events-none">
+      <div id="mapRange" class="flex bg-white rounded-xl shadow-md p-1 pointer-events-auto text-xs font-semibold">
+        <button type="button" data-range="7" class="px-3 py-1.5 rounded-lg">7 days</button>
+        <button type="button" data-range="30" class="px-3 py-1.5 rounded-lg">30 days</button>
+        <button type="button" data-range="all" class="px-3 py-1.5 rounded-lg">All</button>
+      </div>
+      <button id="btnLocate" type="button" class="pointer-events-auto bg-white rounded-xl shadow-md w-10 h-10 flex items-center justify-center" aria-label="Show my location">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7"/></svg>
+      </button>
+    </div>
+    <div class="absolute bottom-7 left-3 z-[400] bg-white/95 rounded-xl shadow-md px-3 py-2 text-xs flex gap-3">
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span>Check-in</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500"></span>Check-out</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-indigo-600"></span>Assigned</span>
+    </div>
+    <div id="mapEmpty" class="hidden absolute inset-0 z-[401] flex items-center justify-center p-8 pointer-events-none">
+      <p class="bg-white rounded-xl shadow-md px-4 py-3 text-sm text-slate-600 text-center">No check-ins in this period.</p>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="view-profile" class="view hidden p-4 space-y-4">
+    <section class="bg-white rounded-3xl shadow-md p-6 text-center">
+      <div id="avatar" class="w-24 h-24 mx-auto rounded-3xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-3xl font-bold overflow-hidden"></div>
+      <h2 id="agentName" class="text-xl font-bold mt-3"></h2>
+      <p class="text-sm text-slate-500">Agent ID: <span id="agentId" class="font-semibold text-slate-700"></span></p>
+      <span id="agentStatus" class="inline-block mt-2 text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full"></span>
+    </section>
+    <section class="bg-white rounded-2xl shadow-sm px-5 py-2">
+      <dl id="profileList" class="divide-y divide-slate-100 text-sm"></dl>
+    </section>
+    <button id="btnLogout" type="button" class="w-full bg-white text-rose-600 font-semibold rounded-2xl shadow-sm py-3.5 active:bg-rose-50">Log out</button>
+  </div>
+
+  <!-- Bottom navigation -->
+  <nav class="fixed bottom-0 inset-x-0 z-[600] bg-white border-t border-slate-200 nav-safe">
+    <div class="max-w-md mx-auto grid grid-cols-4 pt-2">
+      <button type="button" data-tab="home" class="tab flex flex-col items-center gap-0.5 text-slate-400 text-[11px] font-semibold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>
+        Home<span class="tab-dot w-1 h-1 rounded-full bg-slate-900 opacity-0"></span>
+      </button>
+      <button type="button" data-tab="history" class="tab flex flex-col items-center gap-0.5 text-slate-400 text-[11px] font-semibold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>
+        History<span class="tab-dot w-1 h-1 rounded-full bg-slate-900 opacity-0"></span>
+      </button>
+      <button type="button" data-tab="map" class="tab flex flex-col items-center gap-0.5 text-slate-400 text-[11px] font-semibold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14m6-12v14"/></svg>
+        Map<span class="tab-dot w-1 h-1 rounded-full bg-slate-900 opacity-0"></span>
+      </button>
+      <button type="button" data-tab="profile" class="tab flex flex-col items-center gap-0.5 text-slate-400 text-[11px] font-semibold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 21a8 8 0 0116 0"/></svg>
+        Profile<span class="tab-dot w-1 h-1 rounded-full bg-slate-900 opacity-0"></span>
+      </button>
+    </div>
+  </nav>
+</section>
+
+<!-- Boot screen -->
+<div id="bootView" class="fixed inset-0 bg-grad flex items-center justify-center z-[900]"><div class="spinner"></div></div>
+
+<!-- Hidden native camera input — front camera (selfie) for face verification -->
+<input id="camera" type="file" accept="image/*" capture="user" class="hidden">
+
+<!-- Photo confirm -->
+<div id="confirm" class="hidden fixed inset-0 z-[1000] bg-black flex flex-col">
+  <p id="confirmTitle" class="text-white text-center font-semibold pt-5 pb-1"></p>
+  <p class="text-white/60 text-center text-xs pb-3">Make sure your face is clearly visible</p>
+  <p id="confirmWarn" class="hidden mx-4 mb-3 bg-amber-400 text-amber-950 text-sm font-medium rounded-xl px-3 py-2.5 text-center"></p>
+  <div class="flex-1 flex items-center justify-center px-4 min-h-0">
+    <img id="confirmImg" class="max-w-full max-h-full rounded-xl" alt="Captured photo">
+  </div>
+  <div class="grid grid-cols-2 gap-3 p-4 nav-safe">
+    <button id="btnRetake" type="button" class="bg-white/15 active:bg-white/25 text-white font-semibold rounded-2xl py-4">Retake</button>
+    <button id="btnUsePhoto" type="button" class="bg-emerald-500 active:bg-emerald-600 text-white font-bold rounded-2xl py-4">Use photo</button>
+  </div>
+</div>
+
+<!-- Busy overlay -->
+<div id="busy" class="hidden fixed inset-0 z-[1100] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-5 text-white">
+  <div class="spinner"></div>
+  <p id="busyText" class="text-lg font-medium px-8 text-center">Working…</p>
+</div>
+
+<!-- Result sheet -->
+<div id="result" class="hidden fixed inset-0 z-[1050] bg-slate-900/60 flex items-end justify-center">
+  <div class="slide-up bg-white w-full max-w-md rounded-t-3xl overflow-hidden shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div id="resHead" class="px-6 pt-8 pb-6 text-center text-white">
+      <div id="resIcon" class="pop mx-auto w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mb-3"></div>
+      <h2 id="resTitle" class="text-2xl font-bold"></h2>
+      <p id="resSub" class="text-sm opacity-90 mt-1"></p>
+    </div>
+    <div class="p-5 space-y-4 nav-safe">
+      <div id="resBody" class="space-y-2 text-sm"></div>
+      <img id="resPhoto" class="hidden w-full max-h-56 object-cover rounded-xl border border-slate-200" alt="Verification photo">
+      <button id="resClose" type="button" class="w-full bg-grad active:opacity-90 text-white font-semibold rounded-xl py-3.5">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shift preview sheet -->
+<div id="detail" class="hidden fixed inset-0 z-[1040] bg-slate-900/60 flex items-end justify-center">
+  <div class="slide-up bg-slate-50 w-full max-w-md rounded-t-3xl overflow-hidden shadow-2xl max-h-[94vh] flex flex-col">
+    <div class="bg-white px-5 pt-3 pb-4 border-b border-slate-100">
+      <div class="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-3"></div>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p id="dDate" class="text-lg font-bold"></p>
+          <p id="dSub" class="text-sm text-slate-500"></p>
+        </div>
+        <button id="dClose" type="button" class="w-9 h-9 rounded-full bg-slate-100 text-xl leading-none shrink-0" aria-label="Close">&times;</button>
+      </div>
+    </div>
+    <div class="overflow-y-auto p-4 space-y-4 nav-safe">
+      <div id="dMap" class="w-full h-52 rounded-2xl overflow-hidden shadow-sm"></div>
+      <div class="bg-white rounded-2xl shadow-sm divide-y divide-slate-100" id="dTimes"></div>
+      <div>
+        <p class="text-sm font-bold px-1 mb-2">Verification photos</p>
+        <div class="grid grid-cols-2 gap-3" id="dPhotos"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Photo viewer -->
+<div id="viewer" class="hidden fixed inset-0 z-[1200] bg-black/95 flex flex-col">
+  <div class="flex justify-between items-center p-4 text-white">
+    <p id="viewerTitle" class="font-semibold text-sm"></p>
+    <button id="viewerClose" type="button" class="w-10 h-10 rounded-full bg-white/15 text-2xl leading-none">&times;</button>
+  </div>
+  <div class="flex-1 flex items-center justify-center p-4 min-h-0">
+    <img id="viewerImg" class="max-w-full max-h-full rounded-lg" alt="Verification photo">
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed left-1/2 -translate-x-1/2 bottom-24 z-[1300] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-[90vw]"></div>
+
+<script>
+/* =========================================================================
+ *  CONFIG
+ *  Hosted INSIDE Apps Script (file named "Index")? Leave API_URL as it is.
+ *  Hosted elsewhere (GitHub Pages, Netlify…)? Paste your Web App /exec URL.
+ * ======================================================================= */
+const API_URL = 'https://script.google.com/macros/s/AKfycbysnppk5O7SjNXeev9X-PshXKceiHgD89uLbq76z8cqd80ZWEtbI9gFa0m8d_J0Ye0U/exec';
+
+/* Branding — change these to your company's name, colour and logo. */
+const BRAND = {
+  appName: 'Agent Check-In',
+  tagline: 'Field Attendance',
+  primary: '#242EE0',                              // solid accent colour (tabs, small buttons, highlights)
+  gradient: ['#E100B5', '#0D1157', '#242EE0'],     // header / login / main buttons: magenta → navy → blue
+  logoUrl: ''                                      // optional: https link to a square PNG/SVG logo
+};
+
+/* Face verification (compares each selfie with the agent's reference face). */
+const FACE_CHECK = true;
+const FACE_LIB = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1/dist/face-api.js';
+const FACE_MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1/model/';
+
+const PHOTO_MAX_CHARS = 45000;
+const PHOTO_MAX_DIM = 720;
+const DEFAULT_CENTER = [6.5244, 3.3792];   // Lagos — used only when there is nothing to show
+const TZ = 'Africa/Lagos';
+
+/* ========================================================================= */
+const $ = id => document.getElementById(id);
+const IN_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+const HAS_MAP = typeof L !== 'undefined';
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+
+let token = store.get('ci_token');
+let data = null;
+let pin = '';
+let loggingIn = false;
+let pending = null;        // { action, geo, file }
+let busy = false;
+let lastRefresh = 0;
+let currentTab = 'home';
+let mapRange = store.get('ci_maprange') || '30';
+let timer = null;          // { base, at }
+const photoCache = {};
+
+function deviceId() {
+  let id = store.get('ci_device');
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/[^\w]/g, '');
+    store.set('ci_device', id);
+  }
+  return id;
+}
+
+/* ---------- Transport ---------- */
+function call(payload) {
+  if (IN_GAS) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(new Error((err && err.message) || String(err))))
+        .api(payload);
+    });
+  }
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL)) {
+    return Promise.reject(new Error('API_URL is not set. Open the app from its Web App link, or paste the link at the top of Index.html.'));
+  }
+  return fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(r => {
+    if (!r.ok) throw new Error('Server returned HTTP ' + r.status);
+    return r.json();
+  });
+}
+
+async function authed(payload) {
+  const res = await call(Object.assign({ token }, payload));
+  if (res && res.code === 'SESSION') {
+    const err = new Error(res.message);
+    err.session = true;
+    throw err;
+  }
+  return res;
+}
+
+/* ---------- Small helpers ---------- */
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function initials(name) {
+  return String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+function parseISO(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? new Date(+m[1], m[2] - 1, +m[3]) : new Date(NaN);
+}
+function fmtDate(iso, opts) {
+  const d = parseISO(iso);
+  return isNaN(d) ? (iso || '') : d.toLocaleDateString([], opts || { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+function fmtHours(h) {
+  if (h === '' || h == null || isNaN(h)) return '';
+  const mins = Math.round(Number(h) * 60);
+  return Math.floor(mins / 60) + 'h ' + String(mins % 60).padStart(2, '0') + 'm';
+}
+function fmtClock(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const p = n => String(n).padStart(2, '0');
+  return p(Math.floor(sec / 3600)) + ':' + p(Math.floor(sec / 60) % 60) + ':' + p(sec % 60);
+}
+const hm = t => String(t || '').slice(0, 5);
+const hasPoint = (lat, lng) => lat !== '' && lng !== '' && lat != null && lng != null && !isNaN(lat) && !isNaN(lng);
+const todayISO = () => (data && data.today && data.today.date) || '';
+
+/* ---------- Views & tabs ---------- */
+function show(view) {
+  $('bootView').classList.add('hidden');
+  $('loginView').classList.toggle('hidden', view !== 'login');
+  $('appView').classList.toggle('hidden', view !== 'app');
+}
+
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + tab));
+  document.querySelectorAll('.tab').forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('tab-on', on);
+    b.classList.toggle('text-slate-400', !on);
+  });
+  window.scrollTo(0, 0);
+  if (tab === 'map') renderBigMap();
+}
+
+function showLogin(message) {
+  token = null;
+  data = null;
+  store.del('ci_token');
+  pin = '';
+  renderDots();
+  $('loginMsg').textContent = message || '';
+  show('login');
+}
+
+/* ---------- PIN keypad ---------- */
+function buildKeypad() {
+  ['1','2','3','4','5','6','7','8','9','clear','0','back'].forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'key h-16 rounded-2xl text-2xl font-semibold transition ' +
+      (/\d/.test(k) ? 'bg-white/10 active:bg-white/25' : 'bg-transparent active:bg-white/10 text-base text-slate-300');
+    if (k === 'back') {
+      b.setAttribute('aria-label', 'Delete');
+      b.innerHTML = '<svg class="w-7 h-7 mx-auto" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 5H9l-6 7 6 7h12a1 1 0 001-1V6a1 1 0 00-1-1zM17 9l-6 6M11 9l6 6"/></svg>';
+    } else {
+      b.textContent = k === 'clear' ? 'Clear' : k;
+    }
+    b.addEventListener('click', () => pressKey(k));
+    $('keypad').appendChild(b);
+  });
+}
+
+function pressKey(k) {
+  if (loggingIn) return;
+  if (k === 'back') pin = pin.slice(0, -1);
+  else if (k === 'clear') pin = '';
+  else if (pin.length < 4) pin += k;
+  $('loginMsg').textContent = '';
+  renderDots();
+  if (pin.length === 4) submitPin();
+}
+
+function renderDots(loading) {
+  document.querySelectorAll('#dots .dot').forEach((d, i) => {
+    d.className = 'dot w-4 h-4 rounded-full border-2 transition ' +
+      (i < pin.length ? 'bg-white border-white' : 'border-slate-400') + (loading ? ' animate-pulse' : '');
+  });
+}
+
+async function submitPin() {
+  loggingIn = true;
+  renderDots(true);
+  try {
+    const res = await call({ action: 'login', pin, device: deviceId() });
+    if (!res || !res.ok) throw new Error((res && res.message) || 'Login failed.');
+    token = res.token;
+    store.set('ci_token', token);
+    pin = '';
+    renderDots();
+    render(res);
+    show('app');
+    setTab('home');
+    warmUpLocation();
+    updateNet();
+    flushQueue();
+    setTimeout(loadFaceModels, 3000);
+  } catch (err) {
+    pin = '';
+    renderDots();
+    $('loginMsg').textContent = friendlyError(err);
+    const dots = $('dots');
+    dots.classList.remove('shake'); void dots.offsetWidth; dots.classList.add('shake');
+    if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+  } finally {
+    loggingIn = false;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if ($('loginView').classList.contains('hidden')) return;
+  if (/^\d$/.test(e.key)) pressKey(e.key);
+  else if (e.key === 'Backspace') pressKey('back');
+  else if (e.key === 'Escape') pressKey('clear');
+});
+
+/* ---------- Rendering ---------- */
+function render(d, fromCache) {
+  data = d;
+  if (!fromCache) {
+    lastRefresh = Date.now();
+    // Keep a copy so the app can still open with the last data when there's no network.
+    const slim = Object.assign({}, d, { token: undefined });
+    store.set('ci_last', JSON.stringify({ agentId: d.agent.id, data: slim }));
+  }
+  renderAgent(d.agent);
+  renderToday(effectiveToday(), d.agent);
+  renderStats(d.stats);
+  renderMissed(d.history || []);
+  renderLists(d.history || []);
+  renderQueue();
+  if (currentTab === 'map') renderBigMap();
+}
+
+function setAvatar(box, a) {
+  box.innerHTML = '';
+  box.textContent = initials(a.name);
+  if (!a.photo) return;
+  const img = new Image();
+  img.className = 'w-full h-full object-cover';
+  img.alt = a.name;
+  img.referrerPolicy = 'no-referrer';
+  img.onload = () => { box.textContent = ''; box.appendChild(img); };
+  img.src = a.photo;
+}
+
+function renderAgent(a) {
+  setAvatar($('hdrAvatar'), a);
+  setAvatar($('avatar'), a);
+  $('hdrName').textContent = a.name;
+  $('agentName').textContent = a.name;
+  $('agentId').textContent = a.id;
+
+  const st = $('agentStatus');
+  st.textContent = a.status;
+  st.className = 'inline-block mt-2 text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full ' +
+    (a.active ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700');
+
+  const list = $('profileList');
+  list.innerHTML = '';
+  const rows = [['Assigned location', a.location || '—', a.assignedMap]];
+  if (a.profile) rows.push(['Profile', a.profile]);
+  (a.extra || []).forEach(x => rows.push([x.label, x.value]));
+  rows.forEach(([k, v, href]) => {
+    const row = el('div', 'flex justify-between items-center gap-4 py-3');
+    const dd = el('dd', 'font-semibold text-right break-words min-w-0 flex items-center justify-end gap-2', v);
+    if (href) dd.append(linkBtn('Map', null, href));
+    row.append(el('dt', 'text-slate-500 shrink-0', k), dd);
+    list.appendChild(row);
+  });
+}
+
+function updateGreeting() {
+  const h = new Date().getHours();
+  const first = data ? String(data.agent.name).split(/\s+/)[0] : '';
+  $('greeting').textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (first ? ',' : '');
+}
+
+const SHIFT_STYLES = {
+  NONE:     ['bg-amber-50 text-amber-800',     'bg-amber-500'],
+  IN:       ['bg-emerald-50 text-emerald-800', 'bg-emerald-500 animate-pulse'],
+  OUT:      ['bg-sky-50 text-sky-800',         'bg-sky-500'],
+  INACTIVE: ['bg-rose-50 text-rose-800',       'bg-rose-500']
+};
+
+function renderToday(t, a) {
+  $('todayDate').textContent = fmtDate(t.date, { weekday: 'long', day: 'numeric', month: 'long' });
+  let kind = t.state, text;
+  const q = t.queued ? ' (saved on phone)' : '';
+  if (!a.active) { kind = 'INACTIVE'; text = `Your status is "${a.status}". Contact your admin to check in.`; }
+  else if (t.state === 'IN') text = `On shift — checked in at ${hm(t.inTime)}${q}`;
+  else if (t.state === 'OUT') text = `Shift complete — ${hm(t.inTime)} to ${hm(t.outTime)}${q}`;
+  else text = 'You have not checked in today';
+
+  const [box, dot] = SHIFT_STYLES[kind];
+  $('shiftStatus').className = 'mt-4 flex items-center gap-2 text-sm rounded-xl px-3 py-2.5 ' + box;
+  $('shiftDot').className = 'w-2.5 h-2.5 rounded-full shrink-0 ' + dot;
+  $('shiftText').textContent = text;
+
+  timer = (t.state === 'IN' && t.elapsed !== '' && t.elapsed != null) ? { base: Number(t.elapsed), at: Date.now() } : null;
+  $('timerBox').classList.toggle('hidden', !timer);
+  tickTimer();
+
+  $('btnIn').disabled = !a.active || t.state === 'IN';
+  $('btnOut').disabled = !a.active || t.state !== 'IN';
+}
+
+function tickTimer() {
+  if (timer) $('timer').textContent = fmtClock(timer.base + (Date.now() - timer.at) / 1000);
+}
+
+function renderStats(s) {
+  $('statDays').textContent = s ? s.days : 0;
+  $('statShifts').textContent = s ? s.shifts : 0;
+  $('statHours').textContent = s ? (Math.round(s.hours * 10) / 10) : 0;
+}
+
+function renderMissed(list) {
+  const today = todayISO();
+  const missed = list.filter(r => r.date < today && !r.outTime);
+  $('missedBanner').classList.toggle('hidden', !missed.length);
+  if (!missed.length) return;
+  const more = missed.length - 1;
+  $('missedText').textContent = `No check-out was recorded on ${fmtDate(missed[0].date, { weekday: 'short', day: 'numeric', month: 'short' })}` +
+    (more ? ` and ${more} other day${more > 1 ? 's' : ''}` : '') + '. Please inform your supervisor.';
+}
+
+function shiftCard(r) {
+  const today = todayISO();
+  const open = !r.outTime;
+  const missed = open && r.date < today;
+  const d = parseISO(r.date);
+
+  const card = el('button', 'w-full text-left bg-white rounded-2xl shadow-sm p-3 pr-4 active:scale-[.99] transition flex items-center gap-3');
+  card.type = 'button';
+
+  const dateBox = el('div', 'w-12 shrink-0 text-center rounded-xl py-1.5 ' + (r.date === today ? 'bg-brand text-white' : 'bg-slate-100'));
+  dateBox.append(
+    el('p', 'text-[10px] font-bold uppercase opacity-60', d.toLocaleDateString([], { weekday: 'short' })),
+    el('p', 'text-lg font-bold leading-tight', String(d.getDate())),
+    el('p', 'text-[10px] uppercase opacity-60', d.toLocaleDateString([], { month: 'short' }))
+  );
+
+  const mid = el('div', 'flex-1 min-w-0');
+  const times = el('p', 'font-mono font-semibold tabular-nums');
+  times.append(
+    el('span', 'text-emerald-600', hm(r.inTime) || '—'),
+    el('span', 'text-slate-300 mx-1.5', '→'),
+    el('span', open ? 'text-slate-400' : 'text-rose-600', open ? '—' : hm(r.outTime))
+  );
+  const sub = el('p', 'text-xs text-slate-500 mt-0.5',
+    missed ? 'No check-out recorded' : open ? 'On shift now' : `Worked ${fmtHours(r.hours) || '—'}`);
+  mid.append(times, sub);
+
+  const badge = missed ? el('span', 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700', 'MISSED')
+              : open   ? el('span', 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700', 'OPEN')
+              : null;
+
+  const chev = el('span', 'text-slate-300 text-xl leading-none', '›');
+  card.append(dateBox, mid);
+  if (badge) card.append(badge);
+  card.append(chev);
+  card.addEventListener('click', () => openDetail(r));
+  return card;
+}
+
+function renderLists(list) {
+  const recent = $('recentList');
+  recent.innerHTML = '';
+  if (!list.length) {
+    recent.append(el('div', 'bg-white rounded-2xl p-6 text-center text-sm text-slate-500', 'No check-ins yet. Your shifts will appear here.'));
+  } else {
+    list.slice(0, 3).forEach(r => recent.append(shiftCard(r)));
+  }
+
+  const box = $('historyList');
+  box.innerHTML = '';
+  $('historyCount').textContent = list.length ? `Last ${list.length} shifts` : '';
+  if (!list.length) {
+    box.append(el('div', 'bg-white rounded-2xl p-6 text-center text-sm text-slate-500', 'No check-ins yet.'));
+    return;
+  }
+
+  // Group by month with a small summary per month
+  const groups = [];
+  list.forEach(r => {
+    const key = r.date.slice(0, 7);
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== key) groups.push(g = { key, rows: [], hours: 0 });
+    g.rows.push(r);
+    if (typeof r.hours === 'number') g.hours += r.hours;
+  });
+  groups.forEach(g => {
+    const head = el('div', 'flex items-baseline justify-between px-1 pt-3 pb-1');
+    head.append(
+      el('p', 'text-sm font-bold text-slate-700', parseISO(g.key + '-01').toLocaleDateString([], { month: 'long', year: 'numeric' })),
+      el('p', 'text-xs text-slate-500', `${g.rows.length} shift${g.rows.length === 1 ? '' : 's'} · ${fmtHours(g.hours) || '0h'}`)
+    );
+    box.append(head);
+    g.rows.forEach(r => box.append(shiftCard(r)));
+  });
+}
+
+function linkBtn(label, onClick, href) {
+  const b = el(href ? 'a' : 'button', 'text-xs font-semibold text-indigo-600 bg-indigo-50 active:bg-indigo-100 px-2.5 py-1 rounded-lg whitespace-nowrap', label);
+  if (href) { b.href = href; b.target = '_blank'; b.rel = 'noopener'; }
+  else { b.type = 'button'; b.addEventListener('click', onClick); }
+  return b;
+}
+
+/* ---------- Maps ---------- */
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+const TILE_OPTS = { subdomains: 'abcd', maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO' };
+
+function pinIcon(color, label) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="pin" style="background:${color}"><span>${label}</span></div>`,
+    iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -30]
+  });
+}
+const PIN_IN = () => pinIcon('#10b981', 'IN');
+const PIN_OUT = () => pinIcon('#f43f5e', 'OUT');
+const PIN_HOME = () => pinIcon('#4f46e5', '★');
+
+function assignedPoint() {
+  const m = data && data.agent.assignedMap && /q=(-?[\d.]+),(-?[\d.]+)/.exec(data.agent.assignedMap);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+let bigMap = null, bigLayer = null, meLayer = null;
+
+function renderBigMap() {
+  if (!HAS_MAP) { $('mapEmpty').classList.remove('hidden'); $('mapEmpty').firstElementChild.textContent = 'Map could not load. Check your internet connection.'; return; }
+  if (!bigMap) {
+    bigMap = L.map('bigMap', { zoomControl: false, attributionControl: true }).setView(DEFAULT_CENTER, 11);
+    L.control.zoom({ position: 'bottomright' }).addTo(bigMap);
+    L.tileLayer(TILE_URL, TILE_OPTS).addTo(bigMap);
+    bigLayer = L.layerGroup().addTo(bigMap);
+  }
+  document.querySelectorAll('#mapRange button').forEach(b => {
+    b.className = 'px-3 py-1.5 rounded-lg ' + (b.dataset.range === mapRange ? 'bg-brand text-white' : 'text-slate-600');
+  });
+
+  bigLayer.clearLayers();
+  const pts = [];
+  const list = (data && data.history) || [];
+  const cutoff = mapRange === 'all' ? '' : isoDaysAgo(Number(mapRange));
+
+  list.filter(r => !cutoff || r.date >= cutoff).forEach(r => {
+    if (hasPoint(r.inLat, r.inLng)) {
+      L.marker([r.inLat, r.inLng], { icon: PIN_IN() }).bindPopup(popupFor(r, 'Check-in', r.inTime)).addTo(bigLayer);
+      pts.push([r.inLat, r.inLng]);
+    }
+    if (r.outTime && hasPoint(r.outLat, r.outLng)) {
+      L.marker([r.outLat, r.outLng], { icon: PIN_OUT() }).bindPopup(popupFor(r, 'Check-out', r.outTime)).addTo(bigLayer);
+      pts.push([r.outLat, r.outLng]);
+    }
+  });
+
+  const home = assignedPoint();
+  if (home) {
+    L.marker(home, { icon: PIN_HOME(), zIndexOffset: 1000 })
+      .bindPopup(`<b>Assigned location</b><br>${escapeHtml(data.agent.location || '')}`).addTo(bigLayer);
+  }
+
+  $('mapEmpty').classList.toggle('hidden', pts.length > 0);
+  setTimeout(() => {
+    bigMap.invalidateSize();
+    const all = home ? pts.concat([home]) : pts;
+    if (all.length > 1) bigMap.fitBounds(all, { padding: [50, 50], maxZoom: 17 });
+    else if (all.length === 1) bigMap.setView(all[0], 16);
+  }, 60);
+}
+
+function popupFor(r, label, time) {
+  const div = el('div', 'text-sm');
+  div.append(el('p', 'font-bold', fmtDate(r.date, { weekday: 'short', day: 'numeric', month: 'short' })),
+             el('p', 'text-slate-600', `${label} at ${hm(time)}`));
+  const b = el('button', 'mt-2 text-xs font-semibold text-white bg-brand px-3 py-1.5 rounded-lg', 'View shift');
+  b.type = 'button';
+  b.addEventListener('click', () => openDetail(r));
+  div.append(b);
+  return div;
+}
+
+function isoDaysAgo(n) {
+  const d = parseISO(todayISO());
+  if (isNaN(d)) return '';
+  d.setDate(d.getDate() - (n - 1));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function locateMe() {
+  if (!HAS_MAP || !bigMap || !navigator.geolocation) return;
+  toast('Finding your location…');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const ll = [pos.coords.latitude, pos.coords.longitude];
+    if (meLayer) bigMap.removeLayer(meLayer);
+    meLayer = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(bigMap);
+    bigMap.setView(ll, 17);
+  }, err => toast(friendlyError(err), 'error'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+}
+
+/* ---------- Shift preview ---------- */
+let dMap = null, dLayer = null, detailRow = null;
+
+function openDetail(r) {
+  detailRow = r.row;
+  const open = !r.outTime, missed = open && r.date < todayISO();
+  $('dDate').textContent = fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  $('dSub').textContent = missed ? 'No check-out recorded' : open ? 'On shift now' : `Worked ${fmtHours(r.hours) || '—'}`;
+
+  // Times
+  const times = $('dTimes');
+  times.innerHTML = '';
+  const line = (label, color, time, href) => {
+    const row = el('div', 'flex items-center gap-3 px-4 py-3');
+    row.append(el('span', 'w-2.5 h-2.5 rounded-full ' + color),
+               el('span', 'text-slate-500 text-sm w-20', label),
+               el('span', 'font-mono font-semibold tabular-nums flex-1', time || '—'));
+    if (time && href) row.append(linkBtn('Google Maps', null, href));
+    times.append(row);
+  };
+  line('Check-in', 'bg-emerald-500', r.inTime, r.inLoc);
+  line('Check-out', 'bg-rose-500', r.outTime, r.outLoc);
+  if (!open) {
+    const row = el('div', 'flex items-center gap-3 px-4 py-3');
+    row.append(el('span', 'w-2.5 h-2.5'), el('span', 'text-slate-500 text-sm w-20', 'Duration'),
+               el('span', 'font-semibold flex-1', fmtHours(r.hours) || '—'));
+    times.append(row);
+  }
+
+  // Photos
+  const photos = $('dPhotos');
+  photos.innerHTML = '';
+  const tiles = {};
+  [['in', 'Check-in'], ['out', 'Check-out']].forEach(([k, label]) => {
+    const tile = el('div', 'bg-white rounded-2xl shadow-sm overflow-hidden');
+    const frame = el('div', 'aspect-[3/4] bg-slate-100 flex items-center justify-center');
+    frame.append(el('div', 'spinner-dark'));
+    tile.append(frame, el('p', 'text-xs font-semibold text-center py-2 text-slate-600', label));
+    photos.append(tile);
+    tiles[k] = frame;
+  });
+  if (open) setTile(tiles.out, { state: 'none' }, 'Check-out', r);
+  loadPhotos(r).then(p => {
+    if (detailRow !== r.row) return;
+    setTile(tiles.in, p.in, 'Check-in', r);
+    if (!open) setTile(tiles.out, p.out, 'Check-out', r);
+  }).catch(err => {
+    if (err.session) { closeDetail(); return showLogin(err.message); }
+    setTile(tiles.in, { state: 'error' }, 'Check-in', r);
+    if (!open) setTile(tiles.out, { state: 'error' }, 'Check-out', r);
+  });
+
+  $('detail').classList.remove('hidden');
+  renderDetailMap(r);
+}
+
+async function loadPhotos(r) {
+  if (photoCache[r.row] && (photoCache[r.row].out.state === 'ok' || r.outTime === '')) return photoCache[r.row];
+  const res = await authed({ action: 'photos', row: r.row });
+  if (!res || !res.ok) throw new Error((res && res.message) || 'Could not load photos.');
+  photoCache[r.row] = { in: res.in, out: res.out };
+  return photoCache[r.row];
+}
+
+function setTile(frame, p, label, r) {
+  frame.innerHTML = '';
+  if (p && p.state === 'ok') {
+    const img = el('img', 'w-full h-full object-cover cursor-zoom-in');
+    img.src = p.dataUrl;
+    img.alt = label + ' photo';
+    img.addEventListener('click', () => openViewer(p.dataUrl, `${label} • ${fmtDate(r.date, { day: 'numeric', month: 'short' })}`));
+    frame.append(img);
+  } else {
+    const msg = !p || p.state === 'none' ? 'No photo'
+              : p.state === 'legacy' ? 'Saved in old system'
+              : 'Could not load';
+    frame.append(el('p', 'text-xs text-slate-400 text-center px-3', msg));
+  }
+}
+
+function renderDetailMap(r) {
+  const box = $('dMap');
+  if (!HAS_MAP) { box.innerHTML = ''; box.append(el('p', 'text-xs text-slate-400 p-4', 'Map could not load.')); return; }
+  if (!dMap) {
+    dMap = L.map('dMap', { zoomControl: false, attributionControl: true, dragging: true, tap: false });
+    L.tileLayer(TILE_URL, TILE_OPTS).addTo(dMap);
+    dLayer = L.layerGroup().addTo(dMap);
+  }
+  dLayer.clearLayers();
+  const pts = [];
+  if (hasPoint(r.inLat, r.inLng)) { L.marker([r.inLat, r.inLng], { icon: PIN_IN() }).addTo(dLayer); pts.push([r.inLat, r.inLng]); }
+  if (r.outTime && hasPoint(r.outLat, r.outLng)) {
+    L.marker([r.outLat, r.outLng], { icon: PIN_OUT() }).addTo(dLayer);
+    pts.push([r.outLat, r.outLng]);
+  }
+  if (pts.length === 2) L.polyline(pts, { color: '#64748b', weight: 3, dashArray: '6 8' }).addTo(dLayer);
+  const home = assignedPoint();
+  if (home) L.marker(home, { icon: PIN_HOME() }).addTo(dLayer);
+
+  setTimeout(() => {
+    dMap.invalidateSize();
+    const all = home ? pts.concat([home]) : pts;
+    if (all.length > 1) dMap.fitBounds(all, { padding: [40, 40], maxZoom: 17 });
+    else dMap.setView(all[0] || DEFAULT_CENTER, all.length ? 16 : 11);
+  }, 80);
+}
+
+function closeDetail() { $('detail').classList.add('hidden'); detailRow = null; }
+
+function openViewer(src, title) {
+  $('viewerTitle').textContent = title;
+  $('viewerImg').src = src;
+  $('viewer').classList.remove('hidden');
+}
+
+/* ---------- Refresh / logout ---------- */
+async function refresh(quiet) {
+  if (!token || busy) return;
+  const icon = $('refreshIcon');
+  icon.classList.add('animate-spin');
+  try {
+    const res = await authed({ action: 'dashboard' });
+    if (!res || !res.ok) throw new Error((res && res.message) || 'Could not load your data.');
+    render(res);
+    if (!quiet) toast('Up to date');
+    flushQueue();
+  } catch (err) {
+    if (err.session) return showLogin(err.message);
+    if (!quiet) toast(friendlyError(err), 'error');
+  } finally {
+    icon.classList.remove('animate-spin');
+  }
+}
+
+function logout() {
+  const t = token;
+  Object.keys(photoCache).forEach(k => delete photoCache[k]);
+  showLogin('');
+  if (t) call({ action: 'logout', token: t }).catch(() => {});
+}
+
+/* ---------- Geolocation ---------- */
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+}
+function warmUpLocation() {
+  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(() => {}, () => {}, { maximumAge: 600000, timeout: 10000 });
+}
+
+/* ---------- Photo: resize, stamp, compress ---------- */
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not read the photo. Please take it again.'));
+    img.src = src;
+  });
+}
+
+function renderPhoto(img, maxDim, lines, quality) {
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const fs = Math.max(11, Math.round(w / 34)), gap = 4, pad = Math.round(fs * 0.6);
+  const barH = lines.length * (fs + gap) + pad * 2;
+  ctx.fillStyle = 'rgba(0,0,0,.6)';
+  ctx.fillRect(0, h - barH, w, barH);
+  ctx.fillStyle = '#fff';
+  ctx.font = `600 ${fs}px system-ui, -apple-system, sans-serif`;
+  ctx.textBaseline = 'top';
+  lines.forEach((t, i) => ctx.fillText(t, pad, h - barH + pad + i * (fs + gap), w - pad * 2));
+  return c.toDataURL('image/jpeg', quality);
+}
+
+async function compressPhoto(src, lines) {
+  const img = await loadImage(src);
+  let maxDim = PHOTO_MAX_DIM, quality = 0.7, out = '';
+  for (let i = 0; i < 10; i++) {
+    out = renderPhoto(img, maxDim, lines, quality);
+    if (out.length <= PHOTO_MAX_CHARS) return out;
+    if (quality > 0.45) quality -= 0.1;
+    else maxDim = Math.round(maxDim * 0.8);
+  }
+  return out;
+}
+
+/* ---------- Face verification ---------- */
+let facePromise = null;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Could not load ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+/** Downloads the face models once (about 7 MB; the phone keeps them cached afterwards). */
+function loadFaceModels() {
+  if (!FACE_CHECK) return Promise.resolve(false);
+  if (facePromise) return facePromise;
+  facePromise = (async () => {
+    try {
+      if (typeof faceapi === 'undefined') await loadScript(FACE_LIB);
+      // Use the phone's graphics chip (WebGL); fall back to plain CPU. (The WASM engine's files aren't published.)
+      let backend = '';
+      for (const be of ['webgl', 'cpu']) {
+        try { if (await faceapi.tf.setBackend(be)) { await faceapi.tf.ready(); backend = be; break; } } catch (e) { /* try next */ }
+      }
+      if (!backend) throw new Error('No face engine available on this device');
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODELS),
+        faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODELS)
+      ]);
+      return true;
+    } catch (e) {
+      console.warn('Face check unavailable:', e);
+      facePromise = null;   // try again next time
+      return false;
+    }
+  })();
+  return facePromise;
+}
+
+const withTimeout = (p, ms, fallback) => Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
+
+function scaledCanvas(img, maxDim) {
+  const s = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * s);
+  c.height = Math.round(img.naturalHeight * s);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+/** → {status:'ok', descriptor:[128]} | {status:'noface'} | {status:'unavailable'} */
+async function analyzeFace(img) {
+  if (!FACE_CHECK) return { status: 'unavailable' };
+  const ready = await withTimeout(loadFaceModels(), 20000, false);
+  if (!ready) return { status: 'unavailable' };
+  try {
+    const canvas = scaledCanvas(img, 640);
+    const det = await withTimeout(
+      faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 }))
+        .withFaceLandmarks(true).withFaceDescriptor(),
+      20000, 'timeout');
+    if (det === 'timeout') return { status: 'unavailable' };
+    if (!det) return { status: 'noface' };
+    return { status: 'ok', descriptor: Array.from(det.descriptor) };
+  } catch (e) {
+    console.warn('Face analysis failed:', e);
+    return { status: 'unavailable' };
+  }
+}
+
+/* ---------- Offline queue ---------- */
+const lagosDate = ms => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+const lagosTime = ms => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ms));
+
+function readJSON(key, fallback) {
+  try { return JSON.parse(store.get(key)) || fallback; } catch (e) { return fallback; }
+}
+function getQueue() { return readJSON('ci_queue', []); }
+function setQueue(q) {
+  try { localStorage.setItem('ci_queue', JSON.stringify(q)); }
+  catch (e) { throw new Error('Your phone storage is full, so this could not be saved offline. Free some space and try again.'); }
+}
+function queueFor() {
+  const id = data && data.agent ? data.agent.id : null;
+  return getQueue().filter(q => q.agentId === id);
+}
+
+function enqueue(payload) {
+  const q = getQueue();
+  q.push(Object.assign({ qid: Date.now() + '-' + Math.random().toString(36).slice(2, 7), agentId: data.agent.id }, payload, { offline: true }));
+  setQueue(q);
+}
+
+function removeQueued(qid) { setQueue(getQueue().filter(q => q.qid !== qid)); }
+
+function addQueueError(item, message) {
+  const errs = readJSON('ci_qerr', []);
+  errs.push({ agentId: item.agentId, action: item.action, at: item.capturedAt, message });
+  store.set('ci_qerr', JSON.stringify(errs.slice(-5)));
+}
+
+function isNetworkError(err) {
+  if (!navigator.onLine) return true;
+  const m = (err && err.message) || String(err);
+  return /Failed to fetch|NetworkError|Load failed|network|connection|HTTP 0|timed? ?out|ERR_INTERNET/i.test(m);
+}
+
+/** Today's state from the server, updated with anything still waiting on the phone. */
+function effectiveToday() {
+  const t = Object.assign({}, data.today);
+  queueFor().forEach(q => {
+    if (lagosDate(q.capturedAt) !== t.date) return;
+    if (q.action === 'Check-In') {
+      Object.assign(t, { state: 'IN', inTime: lagosTime(q.capturedAt), elapsed: (Date.now() - q.capturedAt) / 1000, queued: true });
+    } else {
+      Object.assign(t, { state: 'OUT', outTime: lagosTime(q.capturedAt), queued: true });
+    }
+  });
+  return t;
+}
+
+let flushing = false;
+
+function renderQueue() {
+  if (!data) return;
+  const n = queueFor().length;
+  $('queueBanner').classList.toggle('hidden', !n);
+  if (n) {
+    $('queueText').textContent = flushing
+      ? 'Sending saved records…'
+      : `${n} record${n > 1 ? 's' : ''} saved on this phone ${n > 1 ? 'are' : 'is'} waiting for internet. ${n > 1 ? 'They' : 'It'} will be sent automatically.`;
+    $('btnSendNow').disabled = flushing;
+    $('btnSendNow').textContent = flushing ? 'Sending…' : 'Send now';
+  }
+  const errs = readJSON('ci_qerr', []).filter(e => e.agentId === data.agent.id);
+  $('qErrBanner').classList.toggle('hidden', !errs.length);
+  const box = $('qErrText');
+  box.innerHTML = '';
+  errs.forEach(e => box.append(el('p', '', `${e.action} saved offline on ${fmtDate(lagosDate(e.at), { day: 'numeric', month: 'short' })} at ${lagosTime(e.at).slice(0, 5)} was not accepted: ${e.message}`)));
+}
+
+/** Sends records saved offline, oldest first. Stops at the first network failure. */
+async function flushQueue(manual) {
+  if (flushing || !token || !data) return;
+  const items = queueFor();
+  if (!items.length) return;
+  if (!navigator.onLine && !manual) return;
+
+  flushing = true;
+  renderQueue();
+  let sent = 0, lastRes = null, stopped = false;
+  try {
+    for (const item of items) {
+      const payload = Object.assign({}, item);
+      delete payload.qid;
+      delete payload.agentId;
+      let res;
+      try {
+        res = await authed(payload);
+      } catch (err) {
+        if (err.session) { stopped = true; showLogin('Please enter your PIN again to send the records saved on your phone.'); return; }
+        if (isNetworkError(err)) { if (manual) toast('Still no internet. Will retry automatically.', 'error'); return; }
+        res = { ok: false, message: friendlyError(err) };
+      }
+      if (res && res.ok) { removeQueued(item.qid); sent++; lastRes = res; delete photoCache[res.row]; }
+      else if (res && res.code === 'REJECTED') { removeQueued(item.qid); addQueueError(item, res.message); }
+      else { if (manual) toast((res && res.message) || 'Could not send. Will retry.', 'error'); return; }
+    }
+  } finally {
+    flushing = false;
+    if (!stopped && token) {
+      if (lastRes) render(lastRes); else renderQueue();
+      if (sent) toast(`${sent} saved record${sent > 1 ? 's' : ''} sent successfully`);
+    }
+  }
+}
+
+/* ---------- Check-in / check-out flow ---------- */
+function startAction(action) {
+  if (busy || !data) return;
+  if (!navigator.geolocation) { toast('This device does not support GPS location', 'error'); return; }
+  // GPS starts at the exact moment of the tap; the camera opens alongside it.
+  const geo = getPosition();
+  geo.catch(() => {});
+  pending = { action, geo, at: Date.now(), attempts: 0 };
+  loadFaceModels();   // make sure models are on their way
+  openCamera();
+}
+
+function openCamera() {
+  const cam = $('camera');
+  cam.value = '';
+  cam.click();
+}
+
+function showConfirm(job, warning) {
+  $('confirmTitle').textContent = job.action === 'Check-In' ? 'Check-in selfie' : 'Check-out selfie';
+  $('confirmImg').src = job.url;
+  $('confirmWarn').classList.toggle('hidden', !warning);
+  $('confirmWarn').textContent = warning || '';
+  const use = $('btnUsePhoto');
+  const blocked = warning && job.attempts < 2;
+  use.classList.toggle('hidden', !!blocked);
+  $('btnRetake').classList.toggle('col-span-2', !!blocked);
+  use.textContent = warning ? 'Continue anyway' : 'Use photo';
+  $('confirm').classList.remove('hidden');
+}
+
+$('camera').addEventListener('change', () => {
+  const file = $('camera').files && $('camera').files[0];
+  if (!file || !pending) return;
+  if (pending.url) URL.revokeObjectURL(pending.url);
+  pending.file = file;
+  pending.url = URL.createObjectURL(file);
+  pending.face = null;
+  pending.warned = false;
+  showConfirm(pending, '');
+});
+
+$('btnRetake').addEventListener('click', () => openCamera());
+
+$('btnUsePhoto').addEventListener('click', async () => {
+  const job = pending;
+  if (!job || !job.file || !data || busy) return;
+  $('confirm').classList.add('hidden');
+  busy = true;
+  const a = data.agent;
+  try {
+    const img = await loadImage(job.url);
+
+    // 1) Face check — the agent must be visible. After two failed tries they may continue (flagged for admin).
+    if (job.warned) {
+      job.face = { status: 'noface' };
+    } else if (!job.face) {
+      showBusy('Checking your photo…');
+      const face = await analyzeFace(img);
+      if (face.status === 'noface') {
+        job.attempts++;
+        job.warned = job.attempts >= 2;
+        hideBusy();
+        busy = false;
+        showConfirm(job, job.attempts >= 2
+          ? 'Still no clear face. Retake, or continue and your supervisor will review it.'
+          : 'We could not see your face clearly. Please retake the photo facing the camera in good light.');
+        return;
+      }
+      job.face = face;
+    }
+    pending = null;
+
+    // 2) GPS — use the fix from the tap; take a fresh one if it failed or is over 2 minutes old.
+    showBusy('Getting your GPS location…');
+    let pos;
+    try {
+      pos = await job.geo;
+      if (Date.now() - job.at > 120000) pos = await getPosition();
+    } catch (first) { pos = await getPosition(); }
+    const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
+
+    // 3) Photo with stamp
+    showBusy('Processing photo…');
+    const photo = await compressPhoto(job.url, [
+      `${a.name} (${a.id}) • ${job.action}`,
+      new Date(job.at).toLocaleString(),
+      `${lat.toFixed(6)}, ${lng.toFixed(6)}  (±${Math.round(acc)} m)`
+    ]);
+    URL.revokeObjectURL(job.url);
+
+    // 4) Send — or keep on the phone if there's no internet
+    const payload = { action: job.action, lat, lng, accuracy: acc, photo, face: job.face, capturedAt: job.at };
+    showBusy(job.action === 'Check-In' ? 'Saving your check-in…' : 'Saving your check-out…');
+    let res;
+    try {
+      if (!navigator.onLine) throw new Error('NetworkError: offline');
+      res = await authed(payload);
+    } catch (err) {
+      if (err.session || !isNetworkError(err)) throw err;
+      enqueue(payload);
+      hideBusy();
+      render(data, true);
+      showQueued(payload, photo);
+      return;
+    }
+
+    hideBusy();
+    if (!res || !res.ok) throw new Error((res && res.message) || 'The sheet did not confirm the save.');
+
+    delete photoCache[res.row];
+    render(res);
+    showResult(res, photo, acc);
+    if (navigator.vibrate) navigator.vibrate(80);
+    flushQueue();
+  } catch (err) {
+    hideBusy();
+    if (err.session) showLogin(err.message);
+    else showError(friendlyError(err));
+  } finally {
+    busy = false;
+  }
+});
+
+function showQueued(payload, photo) {
+  const isIn = payload.action === 'Check-In';
+  $('resHead').className = 'px-6 pt-8 pb-6 text-center text-white bg-amber-500';
+  $('resIcon').innerHTML = '<svg class="w-11 h-11" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>';
+  $('resTitle').textContent = 'Saved on your phone';
+  $('resSub').textContent = 'No internet right now — it will be sent automatically';
+  const body = $('resBody');
+  body.innerHTML = '';
+  body.append(
+    detailRowEl('Action', isIn ? 'Check-in' : 'Check-out'),
+    detailRowEl('Time recorded', lagosTime(payload.capturedAt)),
+    detailRowEl('Location', `Open map (±${Math.round(payload.accuracy)} m)`, `https://www.google.com/maps?q=${payload.lat},${payload.lng}`)
+  );
+  body.append(el('p', 'text-xs text-amber-800 bg-amber-50 rounded-lg p-2.5',
+    'Keep the app installed and open it when you have network. Your original time and location are kept.'));
+  $('resPhoto').src = photo;
+  $('resPhoto').classList.remove('hidden');
+  $('result').classList.remove('hidden');
+}
+
+function friendlyError(err) {
+  if (err && typeof err.code === 'number' && 'PERMISSION_DENIED' in err) {
+    if (err.code === 1) return 'Location permission was denied. Allow location for this site in your browser settings, then try again.';
+    if (err.code === 2) return 'Your location could not be found. Turn on GPS / Location and try again.';
+    if (err.code === 3) return 'Getting your location took too long. Move to an open area and try again.';
+  }
+  const msg = (err && err.message) || String(err);
+  if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) return 'No connection to the server. Check your internet and try again.';
+  return msg;
+}
+
+/* ---------- Result / errors / toast ---------- */
+function showBusy(text) { $('busyText').textContent = text; $('busy').classList.remove('hidden'); }
+function hideBusy() { $('busy').classList.add('hidden'); }
+
+const ICON_OK = '<svg class="w-11 h-11" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+const ICON_ERR = '<svg class="w-11 h-11" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+
+function detailRowEl(label, value, href) {
+  const row = el('div', 'flex justify-between gap-4 border-b border-slate-100 pb-2');
+  const v = el(href ? 'a' : 'span', 'font-semibold text-right ' + (href ? 'text-indigo-600 underline' : 'text-slate-800'), value);
+  if (href) { v.href = href; v.target = '_blank'; v.rel = 'noopener'; }
+  row.append(el('span', 'text-slate-500', label), v);
+  return row;
+}
+
+function showResult(res, photo, acc) {
+  const isIn = res.action === 'Check-In';
+  $('resHead').className = 'px-6 pt-8 pb-6 text-center text-white ' + (isIn ? 'bg-emerald-600' : 'bg-sky-600');
+  $('resIcon').innerHTML = ICON_OK;
+  $('resTitle').textContent = isIn ? 'Checked In!' : 'Checked Out!';
+  $('resSub').textContent = isIn ? 'Your check-in has been saved' : 'Your check-out has been saved';
+
+  const body = $('resBody');
+  body.innerHTML = '';
+  body.append(
+    detailRowEl('Agent', `${res.agent.name} (${res.agent.id})`),
+    detailRowEl('Date', fmtDate(res.date)),
+    detailRowEl(isIn ? 'Check-in time' : 'Check-out time', res.time)
+  );
+  if (!isIn) {
+    body.append(detailRowEl('Checked in at', res.checkInTime));
+    if (res.hoursWorked !== '' && res.hoursWorked != null) body.append(detailRowEl('Time worked', fmtHours(res.hoursWorked)));
+  }
+  body.append(detailRowEl('Location', `Open map (±${Math.round(acc)} m)`, res.locationLink));
+  if (res.refPhotoSaved) {
+    body.append(el('p', 'text-xs text-indigo-700 bg-indigo-50 rounded-lg p-2.5', 'This photo has been saved as your reference face photo.'));
+  }
+  $('resPhoto').src = photo;
+  $('resPhoto').classList.remove('hidden');
+  $('result').classList.remove('hidden');
+}
+
+function showError(message) {
+  $('resHead').className = 'px-6 pt-8 pb-6 text-center text-white bg-rose-600';
+  $('resIcon').innerHTML = ICON_ERR;
+  $('resTitle').textContent = 'Not saved';
+  $('resSub').textContent = 'Nothing was written to the sheet';
+  $('resBody').innerHTML = '';
+  $('resBody').append(el('p', 'text-slate-700 text-base leading-relaxed', message));
+  $('resPhoto').classList.add('hidden');
+  $('result').classList.remove('hidden');
+  if (navigator.vibrate) navigator.vibrate([60, 60, 60]);
+}
+
+let toastTimer;
+function toast(text, kind) {
+  const t = $('toast');
+  t.textContent = text;
+  t.className = 'fixed left-1/2 -translate-x-1/2 bottom-24 z-[1300] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-[90vw] ' +
+    (kind === 'error' ? 'bg-rose-600' : 'bg-slate-900');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+function tick() {
+  $('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  tickTimer();
+  updateGreeting();
+}
+
+/* ---------- Wire up & start ---------- */
+$('btnIn').addEventListener('click', () => startAction('Check-In'));
+$('btnOut').addEventListener('click', () => startAction('Check-Out'));
+$('btnRefresh').addEventListener('click', () => refresh(false));
+$('btnLogout').addEventListener('click', logout);
+$('btnLocate').addEventListener('click', locateMe);
+$('resClose').addEventListener('click', () => $('result').classList.add('hidden'));
+$('dClose').addEventListener('click', closeDetail);
+$('detail').addEventListener('click', e => { if (e.target === $('detail')) closeDetail(); });
+$('viewerClose').addEventListener('click', () => { $('viewer').classList.add('hidden'); $('viewerImg').src = ''; });
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.goto)));
+document.querySelectorAll('#mapRange button').forEach(b => b.addEventListener('click', () => {
+  mapRange = b.dataset.range;
+  store.set('ci_maprange', mapRange);
+  renderBigMap();
+}));
+
+$('btnSendNow').addEventListener('click', () => flushQueue(true));
+$('btnQErrClose').addEventListener('click', () => {
+  const id = data && data.agent.id;
+  store.set('ci_qerr', JSON.stringify(readJSON('ci_qerr', []).filter(e => e.agentId !== id)));
+  renderQueue();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !token) return;
+  if (Date.now() - lastRefresh > 60000) refresh(true);
+  flushQueue();
+});
+
+function updateNet() {
+  $('netPill').classList.toggle('hidden', navigator.onLine);
+  if (navigator.onLine) flushQueue();
+}
+window.addEventListener('online', updateNet);
+window.addEventListener('offline', updateNet);
+setInterval(() => flushQueue(), 60000);
+
+/* ---------- Branding ---------- */
+(function applyBrand() {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(BRAND.primary || '');
+  if (m) document.documentElement.style.setProperty('--brand', [1, 2, 3].map(i => parseInt(m[i], 16)).join(' '));
+  (BRAND.gradient || []).forEach((c, i) => document.documentElement.style.setProperty('--g' + (i + 1), c));
+  document.querySelector('meta[name=theme-color]').setAttribute('content', (BRAND.gradient && BRAND.gradient[1]) || BRAND.primary);
+  document.title = BRAND.appName;
+  $('appName').textContent = BRAND.appName;
+  $('appTag').textContent = BRAND.tagline;
+  if (BRAND.logoUrl) {
+    const img = new Image();
+    img.src = BRAND.logoUrl;
+    img.alt = BRAND.appName;
+    img.className = 'w-full h-full object-contain';
+    img.onload = () => { $('loginLogo').innerHTML = ''; $('loginLogo').appendChild(img); };
+  }
+})();
+
+/* ---------- Installable app (only when hosted outside Apps Script, e.g. GitHub Pages) ---------- */
+if (!IN_GAS && window.isSecureContext && location.protocol !== 'file:') {
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = 'manifest.webmanifest';
+  document.head.appendChild(link);
+  const icon = document.createElement('link');
+  icon.rel = 'apple-touch-icon';
+  icon.href = 'icons/icon-192.png';
+  document.head.appendChild(icon);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+if (!window.isSecureContext && !IN_GAS) $('httpsWarn').classList.remove('hidden');
+
+buildKeypad();
+tick();
+setInterval(tick, 1000);
+
+(async function boot() {
+  if (!token) return showLogin('');
+  try {
+    const res = await authed({ action: 'dashboard' });
+    if (!res || !res.ok) throw new Error((res && res.message) || '');
+    render(res);
+    show('app');
+    setTab('home');
+    warmUpLocation();
+    updateNet();
+    setTimeout(loadFaceModels, 3000);
+  } catch (err) {
+    // No network: open with the last saved data so the agent can still check in/out (saved on the phone).
+    const cached = readJSON('ci_last', null);
+    if (!err.session && isNetworkError(err) && cached && cached.data) {
+      render(cached.data, true);
+      show('app');
+      setTab('home');
+      updateNet();
+      toast('No internet — showing your last saved data', 'error');
+      return;
+    }
+    showLogin(err.session ? err.message : '');
+  }
+})();
+</script>
+</body>
+</html>
