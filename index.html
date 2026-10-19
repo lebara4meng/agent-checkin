@@ -1480,7 +1480,7 @@ if (!IN_GAS && window.isSecureContext && location.protocol !== 'file:') {
   document.head.appendChild(link);
   const icon = document.createElement('link');
   icon.rel = 'apple-touch-icon';
-  icon.href = 'icons/icon-192.png';
+  icon.href = 'apple-touch-icon.png';
   document.head.appendChild(icon);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
