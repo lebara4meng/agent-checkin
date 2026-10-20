@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D1157">
+  <title>Lebara Agent Locator — Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { brand: 'rgb(var(--brand) / <alpha-value>)' } } } };
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    :root { --brand: 36 46 224; --g1: #E100B5; --g2: #0D1157; --g3: #242EE0; }
+    .bg-grad { background-color: var(--g2); background-image: linear-gradient(110deg, var(--g1) 0%, var(--g2) 55%, var(--g3) 100%); }
+    /* White page: give white cards a soft outline so they still stand out */
+    #appView .bg-white.rounded-2xl, #appView .bg-white.rounded-3xl { border: 1px solid #e9ecf3; }
+    body { -webkit-tap-highlight-color: transparent; }
+    .spinner { width: 40px; height: 40px; border: 4px solid rgba(15,23,42,.12); border-top-color: rgb(var(--brand)); border-radius: 50%; animation: spin .8s linear infinite; }
+    .spinner-sm { width: 22px; height: 22px; border: 3px solid rgba(15,23,42,.12); border-top-color: #0f172a; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .slide-up { animation: slideUp .22s ease-out both; }
+    .pin { width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+    .pin span { transform: rotate(45deg); color: #fff; font: 800 9px/1 system-ui, sans-serif; }
+    .leaflet-container { font: inherit; background: #e2e8f0; }
+    .leaflet-control-attribution { font-size: 9px !important; }
+    .tile.on { outline: 3px solid rgb(var(--brand)); outline-offset: -3px; }
+  </style>
+</head>
+<body class="bg-white text-slate-800 antialiased min-h-screen">
+
+<!-- ======================= LOGIN ======================= -->
+<section id="loginView" class="hidden min-h-screen bg-grad flex items-center justify-center p-6">
+  <form id="loginForm" class="bg-white rounded-3xl shadow-2xl p-7 w-full max-w-sm">
+    <div class="flex items-center gap-3 mb-6">
+      <div id="loginLogo" class="w-12 h-12 rounded-2xl bg-grad text-white flex items-center justify-center overflow-hidden">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/></svg>
+      </div>
+      <div>
+        <p id="appName" class="font-bold text-lg leading-tight">Agent Check-In</p>
+        <p class="text-sm text-slate-500">Admin dashboard</p>
+      </div>
+    </div>
+    <label for="adminPin" class="text-sm font-semibold text-slate-600">Admin PIN</label>
+    <input id="adminPin" type="password" inputmode="numeric" autocomplete="current-password"
+      class="mt-1.5 w-full text-xl tracking-[.4em] border-2 border-slate-200 rounded-xl px-4 py-3 focus:border-brand focus:outline-none" required>
+    <p id="loginMsg" class="text-sm text-rose-600 mt-2 min-h-[20px]"></p>
+    <button id="btnLogin" type="submit" class="mt-2 w-full bg-grad text-white font-semibold rounded-xl py-3 active:opacity-90">Sign in</button>
+  </form>
+</section>
+
+<!-- ======================= DASHBOARD ======================= -->
+<section id="appView" class="hidden min-h-screen">
+  <header class="bg-grad text-white sticky top-0 z-[600] shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2.5 mr-auto min-w-0">
+        <div id="hdrLogo" class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center overflow-hidden shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/></svg>
+        </div>
+        <div class="min-w-0">
+          <p id="hdrName" class="font-bold leading-tight truncate">Agent Check-In</p>
+          <p class="text-xs text-white/60">Admin dashboard</p>
+        </div>
+      </div>
+      <div class="order-last sm:order-none w-full sm:w-auto flex items-center justify-between gap-1.5 bg-white/10 rounded-xl p-1">
+        <button id="btnPrev" type="button" class="w-9 h-9 rounded-lg active:bg-white/20 text-lg" aria-label="Previous day">‹</button>
+        <input id="dateInput" type="date" class="bg-transparent text-white text-sm font-semibold px-1 [color-scheme:dark] flex-1 sm:flex-none sm:w-[8.5rem]">
+        <button id="btnNext" type="button" class="w-9 h-9 rounded-lg active:bg-white/20 text-lg" aria-label="Next day">›</button>
+        <button id="btnToday" type="button" class="px-2.5 h-9 rounded-lg bg-white/15 active:bg-white/25 text-xs font-bold">Today</button>
+      </div>
+      <button id="btnRefresh" type="button" class="w-10 h-10 rounded-xl bg-white/10 active:bg-white/20 flex items-center justify-center" aria-label="Refresh">
+        <svg id="refreshIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5.6 15a7 7 0 0011.9 2.4L20 14M4 10l2.5-3.4A7 7 0 0118.4 9"/></svg>
+      </button>
+      <button id="btnLogout" type="button" class="h-10 px-3 rounded-xl bg-white/10 active:bg-white/20 text-sm font-semibold flex items-center gap-1.5" aria-label="Sign out">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        <span class="hidden sm:inline">Sign out</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 space-y-4">
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <h1 id="dayTitle" class="text-xl font-bold"></h1>
+      <p id="settingsLine" class="text-xs text-slate-500"></p>
+    </div>
+
+    <div id="locBanner" class="hidden flex items-center justify-between gap-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-2xl px-4 py-2.5 text-sm">
+      <span class="flex items-center gap-2 font-semibold">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-6.2-7-11.5A7 7 0 0112 2.5a7 7 0 017 7C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        <span id="locBannerText"></span>
+      </span>
+      <button id="btnClearLoc" type="button" class="text-xs font-bold text-indigo-700 bg-white border border-indigo-200 rounded-lg px-2.5 py-1">Show all</button>
+    </div>
+
+    <!-- Summary tiles (click to filter) -->
+    <section id="tiles" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-11 gap-2.5"></section>
+
+    <!-- Missed check-outs -->
+    <details id="missedBox" class="hidden bg-amber-50 border border-amber-200 rounded-2xl">
+      <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-amber-900"></summary>
+      <div id="missedList" class="px-4 pb-3 text-sm text-amber-900 space-y-1"></div>
+    </details>
+
+    <!-- Toolbar -->
+    <section class="bg-white rounded-2xl shadow-sm p-3 flex flex-wrap gap-2 items-center">
+      <input id="search" type="search" placeholder="Search name or ID…" class="flex-1 min-w-[160px] border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand">
+      <select id="stateFilter" aria-label="State" class="border-2 border-brand/40 rounded-xl px-3 py-2 text-sm font-semibold bg-white max-w-[200px]"></select>
+      <select id="locFilter" aria-label="Location" class="border-2 border-brand/40 rounded-xl px-3 py-2 text-sm font-semibold bg-white max-w-[240px]"></select>
+      <div class="flex bg-slate-100 rounded-xl p-1 lg:hidden">
+        <button type="button" data-view="list" class="vbtn px-3 py-1.5 rounded-lg text-sm font-semibold">List</button>
+        <button type="button" data-view="map" class="vbtn px-3 py-1.5 rounded-lg text-sm font-semibold">Map</button>
+      </div>
+      <button id="btnExport" type="button" class="flex items-center gap-1.5 bg-grad text-white text-sm font-semibold rounded-xl px-3 py-2 active:opacity-90">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
+        Export CSV
+      </button>
+    </section>
+    <p id="filterLine" class="text-xs text-slate-500 px-1 -mt-2"></p>
+
+    <!-- List + map -->
+    <section class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 items-start">
+      <div id="listPane" class="space-y-2"></div>
+      <div id="mapPane" class="hidden lg:block lg:sticky lg:top-24">
+        <div id="map" class="w-full rounded-2xl shadow-sm overflow-hidden" style="height: calc(100vh - 140px); min-height: 380px;"></div>
+        <div class="flex flex-wrap gap-3 text-xs mt-2 px-1 text-slate-600">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span>On shift</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-sky-500"></span>Checked out</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500"></span>Has a flag</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span>No signal</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-indigo-600"></span>Assigned location</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</section>
+
+<!-- Boot / loading -->
+<div id="bootView" class="fixed inset-0 bg-white flex items-center justify-center z-[900]"><div class="spinner"></div></div>
+<div id="loading" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-[700] bg-white shadow-lg rounded-full px-4 py-2 flex items-center gap-2 text-sm font-medium">
+  <div class="spinner-sm"></div>Loading…
+</div>
+
+<!-- Agent detail -->
+<div id="detail" class="hidden fixed inset-0 z-[1000] bg-slate-900/60 flex items-end sm:items-center justify-center sm:p-6">
+  <div class="slide-up bg-slate-50 w-full sm:max-w-3xl rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
+    <div class="bg-white px-5 py-4 border-b border-slate-100 flex items-start gap-3">
+      <div id="dAvatar" class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-bold overflow-hidden shrink-0"></div>
+      <div class="flex-1 min-w-0">
+        <p id="dName" class="text-lg font-bold leading-tight"></p>
+        <p id="dSub" class="text-sm text-slate-500"></p>
+      </div>
+      <button id="dClose" type="button" class="w-9 h-9 rounded-full bg-slate-100 text-xl leading-none shrink-0" aria-label="Close">&times;</button>
+    </div>
+    <div class="overflow-y-auto p-4 space-y-4">
+      <div id="dShiftTabs" class="flex gap-2 flex-wrap"></div>
+      <div id="dEmpty" class="hidden bg-white rounded-2xl p-6 text-center text-sm text-slate-500"></div>
+      <div id="dBody" class="space-y-4">
+        <div class="grid grid-cols-3 gap-3" id="dPhotos"></div>
+        <div id="dMap" class="w-full h-64 rounded-2xl overflow-hidden shadow-sm"></div>
+        <div id="dFacts" class="bg-white rounded-2xl shadow-sm divide-y divide-slate-100 text-sm"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Photo viewer -->
+<div id="viewer" class="hidden fixed inset-0 z-[1100] bg-black/95 flex flex-col">
+  <div class="flex justify-between items-center p-4 text-white">
+    <p id="viewerTitle" class="font-semibold text-sm"></p>
+    <button id="viewerClose" type="button" class="w-10 h-10 rounded-full bg-white/15 text-2xl leading-none">&times;</button>
+  </div>
+  <div class="flex-1 flex items-center justify-center p-4 min-h-0">
+    <img id="viewerImg" class="max-w-full max-h-full rounded-lg" alt="Photo">
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed left-1/2 -translate-x-1/2 bottom-6 z-[1200] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-[90vw]"></div>
+
+<script>
+/* Show problems on screen instead of an endless spinner */
+(function () {
+  function showProblem(msg) {
+    var b = document.getElementById('bootView');
+    if (!b) return;
+    b.classList.remove('hidden');
+    b.innerHTML = '<div style="max-width:420px;padding:24px;text-align:center;font-family:system-ui,sans-serif;color:#0f172a">' +
+      '<p style="font-weight:700;font-size:18px;margin-bottom:8px">The admin page could not start</p>' +
+      '<p style="font-size:14px;color:#475569;margin-bottom:12px">' + msg + '</p>' +
+      '<p style="font-size:13px;color:#64748b">Try: open this link in an Incognito window (Ctrl+Shift+N). If that fails, send a screenshot of this message.</p></div>';
+  }
+  window.__showProblem = showProblem;
+  window.addEventListener('error', function (e) { showProblem('Error: ' + (e.message || 'unknown') + (e.lineno ? ' (line ' + e.lineno + ')' : '')); });
+  window.addEventListener('unhandledrejection', function (e) { showProblem('Error: ' + ((e.reason && e.reason.message) || e.reason || 'unknown')); });
+  setTimeout(function () {
+    var b = document.getElementById('bootView');
+    if (b && !b.classList.contains('hidden') && !window.__adminStarted) {
+      showProblem('The page is taking too long to start. Your internet may be slow, or the page libraries (Tailwind / map) could not load.');
+    }
+  }, 25000);
+})();
+</script>
+<script>
+/* =========================================================================
+ *  CONFIG — keep these the same as in Index.html
+ * ======================================================================= */
+const API_URL = 'https://script.google.com/macros/s/AKfycbysnppk5O7SjNXeev9X-PshXKceiHgD89uLbq76z8cqd80ZWEtbI9gFa0m8d_J0Ye0U/exec';
+const BRAND = {
+  appName: 'Lebara Agent Locator',
+  primary: '#242EE0',
+  gradient: ['#E100B5', '#0D1157', '#242EE0'],
+  logoUrl: ''
+};
+const DEFAULT_CENTER = [6.5244, 3.3792];
+
+/* ========================================================================= */
+const $ = id => document.getElementById(id);
+const IN_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+const HAS_MAP = typeof L !== 'undefined';
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+
+let token = store.get('ci_admin_token');
+let report = null;
+let filter = 'all';
+let view = 'list';
+let photoCache = {};
+
+function deviceId() {
+  let id = store.get('ci_device');
+  if (!id) { id = String(Date.now()) + Math.random().toString(36).slice(2); store.set('ci_device', id); }
+  return id;
+}
+
+/* ---------- Transport ---------- */
+function call(payload) {
+  if (IN_GAS) {
+    return new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(new Error((err && err.message) || String(err)))).api(payload);
+    });
+  }
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL)) {
+    return Promise.reject(new Error('Open this page from your Web App link with ?page=admin at the end.'));
+  }
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+    .then(r => { if (!r.ok) throw new Error('Server returned HTTP ' + r.status); return r.json(); });
+}
+async function authed(payload) {
+  const res = await call(Object.assign({ token }, payload));
+  if (res && res.code === 'SESSION') { const e = new Error(res.message); e.session = true; throw e; }
+  return res;
+}
+
+/* ---------- Helpers ---------- */
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+function parseISO(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? new Date(+m[1], m[2] - 1, +m[3]) : new Date(NaN); }
+function isoOf(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function fmtDate(iso, o) { const d = parseISO(iso); return isNaN(d) ? iso : d.toLocaleDateString([], o || { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
+function fmtHours(h) { if (h === '' || h == null || isNaN(h)) return ''; const m = Math.round(h * 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; }
+const hm = t => String(t || '').slice(0, 5);
+const fmtDist = m => (m === '' || m == null || isNaN(m)) ? '—' : (m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km');
+const hasPt = (a, b) => a !== '' && b !== '' && a != null && b != null && !isNaN(a) && !isNaN(b);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(text, kind) {
+  const t = $('toast');
+  t.textContent = text;
+  t.className = 'fixed left-1/2 -translate-x-1/2 bottom-6 z-[1200] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-[90vw] ' + (kind === 'error' ? 'bg-rose-600' : 'bg-slate-900');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+function show(v) {
+  $('bootView').classList.add('hidden');
+  $('loginView').classList.toggle('hidden', v !== 'login');
+  $('appView').classList.toggle('hidden', v !== 'app');
+}
+
+function showLogin(msg) {
+  token = null;
+  store.del('ci_admin_token');
+  $('loginMsg').textContent = msg || '';
+  $('adminPin').value = '';
+  show('login');
+  setTimeout(() => $('adminPin').focus(), 50);
+}
+
+/* ---------- Login ---------- */
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('btnLogin').disabled = true;
+  $('btnLogin').textContent = 'Signing in…';
+  try {
+    const res = await call({ action: 'adminLogin', pin: $('adminPin').value.trim(), device: deviceId() });
+    if (!res || !res.ok) throw new Error((res && res.message) || 'Sign-in failed.');
+    token = res.token;
+    store.set('ci_admin_token', token);
+    show('app');
+    loadDay($('dateInput').value || '');
+  } catch (err) {
+    $('loginMsg').textContent = err.message;
+    $('adminPin').value = '';
+  } finally {
+    $('btnLogin').disabled = false;
+    $('btnLogin').textContent = 'Sign in';
+  }
+});
+
+/* ---------- Load a day ---------- */
+async function loadDay(date) {
+  $('loading').classList.remove('hidden');
+  $('refreshIcon').classList.add('animate-spin');
+  try {
+    const res = await authed({ action: 'adminDay', date });
+    if (!res || !res.ok) throw new Error((res && res.message) || 'Could not load the report.');
+    report = res;
+    photoCache = {};
+    $('dateInput').value = res.date;
+    $('dateInput').max = res.today;
+    $('btnNext').disabled = res.date >= res.today;
+    $('btnNext').classList.toggle('opacity-30', res.date >= res.today);
+    render();
+  } catch (err) {
+    if (err.session) return showLogin(err.message);
+    toast(err.message, 'error');
+    if (!report) $('dayTitle').textContent = 'Could not load the report: ' + err.message;
+  } finally {
+    $('loading').classList.add('hidden');
+    $('refreshIcon').classList.remove('animate-spin');
+  }
+}
+
+function shiftDay(n) {
+  const d = parseISO($('dateInput').value || report.today);
+  d.setDate(d.getDate() + n);
+  const iso = isoOf(d);
+  if (report && iso > report.today) return;
+  loadDay(iso);
+}
+
+/* ---------- Rendering ---------- */
+const STATE = {
+  ON_SHIFT: ['On shift', 'bg-emerald-100 text-emerald-700'],
+  DONE:     ['Checked out', 'bg-sky-100 text-sky-700'],
+  ABSENT:   ['Absent', 'bg-slate-200 text-slate-600'],
+  MISSED:   ['No check-out', 'bg-amber-100 text-amber-800'],
+  INACTIVE: ['Inactive', 'bg-slate-100 text-slate-400']
+};
+
+const TILES = [
+  ['all', 'Active agents', s => s.agents, 'text-slate-800'],
+  ['in', 'Checked in', s => s.checkedIn, 'text-slate-800'],
+  ['on', 'On shift', s => s.onShift, 'text-emerald-600'],
+  ['done', 'Checked out', s => s.done, 'text-sky-600'],
+  ['absent', 'Absent', s => s.absent, 'text-slate-500'],
+  ['late', 'Late', s => s.late, 'text-amber-600'],
+  ['outside', 'Outside zone', s => s.outside, 'text-rose-600'],
+  ['face', 'Face issue', s => s.face, 'text-rose-600'],
+  ['offline', 'Sent offline', s => s.offline, 'text-indigo-600'],
+  ['outsideNow', 'Outside now', s => s.outsideNow, 'text-rose-600'],
+  ['silent', 'No signal', s => s.silent, 'text-amber-600']
+];
+
+const FILTERS = {
+  all:     a => a.active || a.shifts.length,
+  in:      a => a.shifts.length > 0,
+  on:      a => a.state === 'ON_SHIFT',
+  done:    a => a.state === 'DONE',
+  absent:  a => a.state === 'ABSENT',
+  late:    a => a.flags.late,
+  outside: a => a.flags.outside,
+  face:    a => a.flags.face,
+  offline: a => a.flags.offline,
+  outsideNow: a => a.flags.outsideNow,
+  silent: a => a.flags.silent
+};
+
+function render() {
+  const r = report;
+  $('dayTitle').textContent = fmtDate(r.date) + (r.date === r.today ? ' (today)' : '');
+  $('settingsLine').textContent = `Zone radius ${r.settings.radius} m · Check-in window ${r.settings.opens}–${r.settings.closes} · Face threshold ${r.settings.faceThreshold}` +
+    (r.settings.pingEvery ? ` · Live location every ${r.settings.pingEvery} min (no signal after ${r.settings.silentAfter} min)` : '');
+
+  // State filter: all 36 states + FCT, with agent counts (kept on this device, or ?state= in the link)
+  const ssel = $('stateFilter');
+  const wantState = filtersChosen ? ssel.value : (ssel.value || currentPick('state'));
+  const states = r.states && r.states.length ? r.states : [];
+  const perState = {};
+  r.agents.forEach(a => { if (a.stateName) perState[a.stateName] = (perState[a.stateName] || 0) + 1; });
+  ssel.innerHTML = '';
+  ssel.add(new Option(`All states (${r.agents.length})`, ''));
+  states.forEach(st => {
+    const o = new Option(`${st} (${perState[st] || 0})`, st);
+    if (!perState[st]) o.style.color = '#94a3b8';
+    ssel.add(o);
+  });
+  if (r.agents.some(a => !a.stateName)) ssel.add(new Option(`State not set (${r.agents.filter(a => !a.stateName).length})`, '__none'));
+  ssel.value = [...ssel.options].some(o => o.value === wantState) ? wantState : '';
+  const st = ssel.value;
+  const inState = r.agents.filter(a => !st || (st === '__none' ? !a.stateName : a.stateName === st));
+
+  // Location filter: only locations inside the chosen state (kept on this device, or ?loc= in the link)
+  const sel = $('locFilter');
+  const want = filtersChosen ? sel.value : (sel.value || currentPick('loc'));
+  const locs = [...new Set(inState.map(a => a.location).filter(Boolean))].sort();
+  sel.innerHTML = '';
+  sel.add(new Option(st ? 'All locations in ' + (st === '__none' ? 'this group' : st) : 'All locations', ''));
+  locs.forEach(l => sel.add(new Option(l, l)));
+  sel.value = locs.includes(want) ? want : '';
+  const loc = sel.value;
+  const stName = st === '__none' ? 'agents with no state set' : st;
+  $('locBanner').classList.toggle('hidden', !st && !loc);
+  $('locBannerText').textContent = (st || loc) ? `Viewing ${[stName, loc].filter(Boolean).join(' · ')} only` : '';
+
+  // Tiles — counted for the selected state / location only
+  const inLoc = inState.filter(a => !loc || a.location === loc);
+  const sum = summarize(inLoc);
+  const tiles = $('tiles');
+  tiles.innerHTML = '';
+  TILES.forEach(([key, label, fn, color]) => {
+    const b = el('button', 'tile bg-white rounded-2xl shadow-sm p-3 text-left active:scale-[.98] transition' + (filter === key ? ' on' : ''));
+    b.type = 'button';
+    b.append(el('p', 'text-2xl font-bold tabular-nums ' + color, String(fn(sum))), el('p', 'text-[11px] text-slate-500 leading-tight', label));
+    b.addEventListener('click', () => { filter = filter === key ? 'all' : key; render(); });
+    tiles.append(b);
+  });
+
+  // Missed check-outs (last 14 days)
+  const mb = $('missedBox');
+  const ids = new Set(inLoc.map(a => a.id));
+  const missed = r.missed.filter(m => ids.has(m.id));
+  mb.classList.toggle('hidden', !missed.length);
+  if (missed.length) {
+    mb.querySelector('summary').textContent = `${missed.length} missed check-out${missed.length > 1 ? 's' : ''} in the 14 days before this date`;
+    const ml = $('missedList');
+    ml.innerHTML = '';
+    missed.forEach(m => ml.append(el('p', '', `${fmtDate(m.date, { weekday: 'short', day: 'numeric', month: 'short' })} — ${m.name} (${m.id}), checked in ${hm(m.inTime)}`)));
+  }
+
+  renderList();
+}
+
+/** Same counts as the server, but for whatever agents are passed in (used for the location view). */
+function summarize(list) {
+  const s = { agents: 0, checkedIn: 0, onShift: 0, done: 0, absent: 0, late: 0, outside: 0, face: 0, offline: 0, inactive: 0, outsideNow: 0, silent: 0 };
+  list.forEach(a => {
+    if (a.active) { s.agents++; if (!a.shifts.length) s.absent++; } else s.inactive++;
+    if (a.shifts.length) s.checkedIn++;
+    if (a.state === 'ON_SHIFT') s.onShift++;
+    if (a.state === 'DONE') s.done++;
+    ['late', 'outside', 'face', 'offline', 'outsideNow', 'silent'].forEach(k => { if (a.flags[k]) s[k]++; });
+  });
+  return s;
+}
+
+let filtersChosen = false;   // once the admin picks by hand, that choice wins over the link
+function currentPick(kind) {           // kind: 'state' | 'loc'
+  const key = kind === 'state' ? 'ci_admin_state' : 'ci_admin_loc';
+  if (filtersChosen) return store.get(key) || '';
+  const fromLink = new URLSearchParams(location.search).get(kind);
+  if (fromLink != null) return kind === 'state' ? (matchState(fromLink) || fromLink) : fromLink;
+  return store.get(key) || '';
+}
+function matchState(v) {
+  const k = String(v || '').toLowerCase().replace(/\bstate\b/g, '').replace(/[^a-z]/g, '');
+  if (k === 'abuja' || k === 'fct' || k === 'federalcapitalterritory') return 'FCT';
+  return ((report && report.states) || []).find(s => s.toLowerCase().replace(/[^a-z]/g, '') === k) || '';
+}
+
+function visibleAgents() {
+  const q = $('search').value.trim().toLowerCase();
+  const loc = $('locFilter').value;
+  const st = $('stateFilter').value;
+  return report.agents
+    .filter(FILTERS[filter])
+    .filter(a => !st || (st === '__none' ? !a.stateName : a.stateName === st))
+    .filter(a => !loc || a.location === loc)
+    .filter(a => !q || a.name.toLowerCase().includes(q) || String(a.id).toLowerCase().includes(q));
+}
+
+function badge(text, cls) { return el('span', 'text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap ' + cls, text); }
+
+function agoText(min) {
+  if (min === '' || min == null) return '';
+  if (min < 1) return 'just now';
+  if (min < 60) return min + ' min ago';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h + ' h ' + String(m).padStart(2, '0') + ' ago';
+}
+
+/** "Last seen" chip: green = inside & recent, red = outside, amber = no signal, grey = no zone. */
+function seenChip(a) {
+  const ls = a.lastSeen;
+  const onShift = a.state === 'ON_SHIFT';
+  if (!ls) return onShift ? badge('No signal', 'bg-amber-500 text-white') : null;
+  const isToday = report.date === report.today;
+  const when = isToday ? `Seen ${ls.time} · ${agoText(ls.ageMin)}` : `Last seen ${ls.time}`;
+  let cls = 'bg-slate-100 text-slate-600';
+  if (onShift && a.flags.silent) cls = 'bg-amber-500 text-white';
+  else if (onShift && ls.outside === true) cls = 'bg-rose-600 text-white';
+  else if (onShift && ls.outside === false) cls = 'bg-emerald-600 text-white';
+  const c = badge((onShift && a.flags.silent ? 'No signal · ' : '') + when, cls);
+  c.title = `${ls.src} location${ls.dist !== '' ? ', ' + fmtDist(ls.dist) + ' from assigned' : ''}${ls.bat !== '' ? ', battery ' + ls.bat + '%' : ''}`;
+  return c;
+}
+
+/** Location flag: green = inside the assigned zone, red = outside, grey = no assigned location / no GPS. */
+function zoneChip(label, outside, dist, hasZone) {
+  const what = label === 'In' ? 'Check-in' : 'Check-out';
+  if (!hasZone || outside === '' || outside == null) return badge(`${what} · no zone set`, 'bg-slate-100 text-slate-500');
+  const c = el('span', 'inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap ' +
+    (outside ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'));
+  c.append(el('span', '', outside ? '✕' : '✓'), el('span', '', outside ? `${what} · ${fmtDist(dist)} away` : `${what} · in zone`));
+  c.title = `${what} was ${fmtDist(dist)} from the assigned location (${outside ? 'outside' : 'inside'} the zone)`;
+  return c;
+}
+
+function renderList() {
+  const list = visibleAgents();
+  const order = { ON_SHIFT: 0, MISSED: 1, DONE: 2, ABSENT: 3, INACTIVE: 4 };
+  list.sort((a, b) => (order[a.state] - order[b.state]) || a.name.localeCompare(b.name));
+
+  const label = TILES.find(t => t[0] === filter)[1];
+  $('filterLine').textContent = `Showing ${list.length} agent${list.length === 1 ? '' : 's'}` + (filter !== 'all' ? ` · filter: ${label} (tap the tile again to clear)` : '');
+
+  const pane = $('listPane');
+  pane.innerHTML = '';
+  if (!list.length) {
+    pane.append(el('div', 'bg-white rounded-2xl p-8 text-center text-sm text-slate-500', 'No agents match this view.'));
+  }
+  list.forEach(a => {
+    const s = a.shifts[0], last = a.shifts[a.shifts.length - 1];
+    const card = el('button', 'w-full text-left bg-white rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[.995] transition');
+    card.type = 'button';
+
+    const av = el('div', 'w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600 overflow-hidden shrink-0', initials(a.name));
+    if (a.photo) { const img = new Image(); img.className = 'w-full h-full object-cover'; img.referrerPolicy = 'no-referrer'; img.onload = () => { av.textContent = ''; av.append(img); }; img.src = a.photo; }
+
+    const mid = el('div', 'flex-1 min-w-0');
+    const top = el('div', 'flex items-center gap-2 min-w-0');
+    top.append(el('p', 'font-semibold truncate', a.name), el('span', 'text-xs text-slate-400 shrink-0', a.id));
+    const sub = el('p', 'text-xs text-slate-500 truncate', [a.location || 'No assigned location', a.stateName ? a.stateName + (a.stateGuess ? ' (est.)' : '') : ''].filter(Boolean).join(' · '));
+    const flags = el('div', 'flex flex-wrap gap-1 mt-1');
+    if (a.flags.late && s) flags.append(badge(`Late ${s.lateMin}m`, 'bg-amber-100 text-amber-800'));
+    if (last) {
+      flags.append(zoneChip('In', last.inOutside, last.inDist, a.lat != null));
+      if (!last.open) flags.append(zoneChip('Out', last.outOutside, last.outDist, a.lat != null));
+    }
+    if (a.flags.face) flags.append(badge('Face check', 'bg-rose-100 text-rose-700'));
+    if (a.flags.offline) flags.append(badge('Offline', 'bg-indigo-100 text-indigo-700'));
+    if (a.shifts.length > 1) flags.append(badge(`${a.shifts.length} shifts`, 'bg-slate-100 text-slate-600'));
+    mid.append(top, sub);
+    if (flags.childNodes.length) mid.append(flags);
+
+    const right = el('div', 'text-right shrink-0');
+    const [stLabel, stCls] = STATE[a.state];
+    right.append(badge(stLabel, stCls));
+    if (s) right.append(el('p', 'font-mono text-sm font-semibold tabular-nums mt-1', `${hm(s.inTime)} → ${last.open ? '—' : hm(last.outTime)}`));
+    const seen = seenChip(a);
+    if (seen) { const w = el('div', 'mt-1 flex justify-end'); w.append(seen); right.append(w); }
+
+    card.append(av, mid, right);
+    card.addEventListener('click', () => openDetail(a));
+    pane.append(card);
+  });
+
+  renderMap(list);
+}
+
+/* ---------- Map ---------- */
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';   // free, no API key
+const TILE_OPTS = { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' };
+function pinIcon(color, label) {
+  return L.divIcon({ className: '', html: `<div class="pin" style="background:${color}"><span>${esc(label)}</span></div>`, iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -28] });
+}
+let map = null, layer = null;
+
+function renderMap(list) {
+  if (!HAS_MAP || $('mapPane').offsetParent === null) return;
+  if (!map) {
+    map = L.map('map', { zoomControl: true }).setView(DEFAULT_CENTER, 11);
+    L.tileLayer(TILE_URL, TILE_OPTS).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  layer.clearLayers();
+  const pts = [];
+  list.forEach(a => {
+    const s = a.shifts[a.shifts.length - 1];
+    if (s && hasPt(s.inLat, s.inLng)) {
+      const flagged = a.flags.late || a.flags.outside || a.flags.face || a.flags.outsideNow;
+      const color = a.flags.silent ? '#f59e0b' : flagged ? '#f43f5e' : a.state === 'ON_SHIFT' ? '#10b981' : '#0ea5e9';
+      const ls = a.lastSeen;
+      const pos = ls && hasPt(ls.lat, ls.lng) ? [ls.lat, ls.lng]
+                : !s.open && hasPt(s.outLat, s.outLng) ? [s.outLat, s.outLng] : [s.inLat, s.inLng];
+      const div = el('div', 'text-sm');
+      div.append(el('p', 'font-bold', a.name), el('p', 'text-slate-600', `${STATE[a.state][0]} · in ${hm(s.inTime)}${s.open ? '' : ', out ' + hm(s.outTime)}`));
+      if (ls) div.append(el('p', 'text-slate-600', `Last seen ${ls.time}${report.date === report.today ? ' (' + agoText(ls.ageMin) + ')' : ''}${ls.outside === true ? ' · OUTSIDE' : ''}`));
+      const b = el('button', 'mt-2 text-xs font-semibold text-white bg-brand px-3 py-1.5 rounded-lg', 'Details');
+      b.type = 'button';
+      b.addEventListener('click', () => openDetail(a));
+      div.append(b);
+      L.marker(pos, { icon: pinIcon(color, initials(a.name)) }).bindPopup(div).addTo(layer);
+      pts.push(pos);
+    } else if (a.lat != null && a.state === 'ABSENT') {
+      L.circleMarker([a.lat, a.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#94a3b8', fillOpacity: 1 })
+        .bindPopup(`<b>${esc(a.name)}</b><br>Absent · ${esc(a.location || '')}`).addTo(layer);
+      pts.push([a.lat, a.lng]);
+    }
+  });
+  setTimeout(() => {
+    map.invalidateSize();
+    if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+    else if (pts.length === 1) map.setView(pts[0], 15);
+  }, 60);
+}
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll('.vbtn').forEach(b => b.className = 'vbtn px-3 py-1.5 rounded-lg text-sm font-semibold ' + (b.dataset.view === v ? 'bg-white shadow-sm' : 'text-slate-500'));
+  const wide = window.matchMedia('(min-width: 1024px)').matches;
+  $('listPane').classList.toggle('hidden', !wide && v === 'map');
+  $('mapPane').classList.toggle('hidden', !wide && v !== 'map');
+  if (report) renderMap(visibleAgents());
+}
+
+/* ---------- Agent detail ---------- */
+let dMap = null, dLayer = null, dAgent = null, dIndex = 0;
+
+function openDetail(a) {
+  dAgent = a;
+  dIndex = 0;
+  $('dName').textContent = a.name;
+  $('dSub').textContent = `${a.id} · ${a.location || 'No assigned location'} · ${fmtDate(report.date, { weekday: 'short', day: 'numeric', month: 'short' })}`;
+  const av = $('dAvatar');
+  av.innerHTML = '';
+  av.textContent = initials(a.name);
+  if (a.photo) { const img = new Image(); img.className = 'w-full h-full object-cover'; img.referrerPolicy = 'no-referrer'; img.onload = () => { av.textContent = ''; av.append(img); }; img.src = a.photo; }
+  $('detail').classList.remove('hidden');
+  renderShift();
+}
+
+function renderShift() {
+  const a = dAgent;
+  const tabs = $('dShiftTabs');
+  tabs.innerHTML = '';
+  if (a.shifts.length > 1) {
+    a.shifts.forEach((s, i) => {
+      const b = el('button', 'px-3 py-1.5 rounded-lg text-sm font-semibold ' + (i === dIndex ? 'bg-brand text-white' : 'bg-white text-slate-600 shadow-sm'), `Shift ${i + 1} · ${hm(s.inTime)}`);
+      b.type = 'button';
+      b.addEventListener('click', () => { dIndex = i; renderShift(); });
+      tabs.append(b);
+    });
+  }
+  const s = a.shifts[dIndex];
+  $('dEmpty').classList.toggle('hidden', !!s);
+  $('dBody').classList.toggle('hidden', !s);
+  if (!s) {
+    $('dEmpty').textContent = a.active ? 'No check-in on this date.' : `This agent is ${a.status}.`;
+    return;
+  }
+
+  // Photos: reference / check-in / check-out
+  const photos = $('dPhotos');
+  photos.innerHTML = '';
+  const frames = {};
+  [['ref', 'Reference'], ['in', 'Check-in'], ['out', 'Check-out']].forEach(([k, label]) => {
+    const tile = el('div', 'bg-white rounded-2xl shadow-sm overflow-hidden');
+    const f = el('div', 'aspect-[3/4] bg-slate-100 flex items-center justify-center');
+    f.append(el('div', 'spinner-sm'));
+    tile.append(f, el('p', 'text-xs font-semibold text-center py-2 text-slate-600', label));
+    photos.append(tile);
+    frames[k] = f;
+  });
+  loadPhotos(s.row).then(p => {
+    if (dAgent !== a || a.shifts[dIndex] !== s) return;
+    setTile(frames.ref, p.ref, 'Reference');
+    setTile(frames.in, p.in, 'Check-in');
+    setTile(frames.out, s.open ? { state: 'none' } : p.out, 'Check-out');
+  }).catch(err => {
+    if (err.session) return showLogin(err.message);
+    ['ref', 'in', 'out'].forEach(k => setTile(frames[k], { state: 'error' }, ''));
+  });
+
+  // Facts
+  const facts = $('dFacts');
+  facts.innerHTML = '';
+  const row = (label, value, cls, href) => {
+    const r = el('div', 'flex justify-between gap-4 px-4 py-2.5');
+    const v = el(href ? 'a' : 'span', 'font-semibold text-right ' + (cls || '') + (href ? ' text-indigo-600 underline' : ''), value);
+    if (href) { v.href = href; v.target = '_blank'; v.rel = 'noopener'; }
+    r.append(el('span', 'text-slate-500', label), v);
+    facts.append(r);
+  };
+  const faceText = (m, sc) => m === 'TRUE' ? `Match (${sc})` : m === 'FALSE' ? `NO MATCH (${sc})` : (m || '—');
+  const faceCls = m => m === 'TRUE' ? 'text-emerald-600' : (m === 'FALSE' || m === 'No face') ? 'text-rose-600' : 'text-slate-500';
+  const gmap = (lat, lng) => hasPt(lat, lng) ? 'https://www.google.com/maps?q=' + lat + ',' + lng : '';
+
+  const ls = a.lastSeen;
+  if (ls) {
+    const lsTxt = `${ls.time}${report.date === report.today ? ' (' + agoText(ls.ageMin) + ')' : ''} · ` +
+      (a.lat == null ? 'no assigned location' : `${fmtDist(ls.dist)} ${ls.outside === true ? '— OUTSIDE' : '— inside'}`) +
+      (ls.acc !== '' ? ` (GPS ±${ls.acc} m)` : '') + (ls.bat !== '' ? ` · battery ${ls.bat}%` : '');
+    row('Last seen', lsTxt, a.flags.silent ? 'text-amber-600' : ls.outside === true ? 'text-rose-600' : 'text-emerald-600');
+  } else if (a.state === 'ON_SHIFT') {
+    row('Last seen', 'No signal yet', 'text-amber-600');
+  }
+  const trailRow = el('div', 'flex justify-between gap-4 px-4 py-2.5');
+  trailRow.append(el('span', 'text-slate-500', 'Live trail'), el('span', 'font-semibold text-right text-slate-400', 'Loading…'));
+  trailRow.id = 'trailRow';
+  facts.append(trailRow);
+  row('Check-in time', s.inTime || '—');
+  row('Arrival', s.lateMin === '' ? '—' : s.late ? `Late — ${s.lateMin} min after ${report.settings.closes}` : s.early ? `Early — before ${report.settings.opens}` : 'On time', s.late ? 'text-amber-600' : s.early ? 'text-sky-600' : 'text-emerald-600');
+  row('Check-in distance', a.lat == null ? 'No assigned location' : `${fmtDist(s.inDist)} ${s.inOutside === true ? '— OUTSIDE' : '— inside'}${s.inAcc !== '' ? ` (GPS ±${s.inAcc} m)` : ''}`, s.inOutside === true ? 'text-rose-600' : '', '');
+  row('Check-in location', hasPt(s.inLat, s.inLng) ? 'Open in Google Maps' : '—', '', gmap(s.inLat, s.inLng));
+  row('Check-in face', faceText(s.inFace, s.inFaceScore), faceCls(s.inFace));
+  row('Check-in sent', s.inMode || '—', /offline/i.test(s.inMode) ? 'text-indigo-600' : '');
+  row('Check-out time', s.open ? (s.missed ? 'No check-out recorded' : 'Still on shift') : s.outTime, s.missed ? 'text-amber-600' : '');
+  if (!s.open) {
+    row('Hours worked', fmtHours(s.hours) || '—');
+    row('Check-out distance', a.lat == null ? 'No assigned location' : `${fmtDist(s.outDist)} ${s.outOutside === true ? '— OUTSIDE' : '— inside'}${s.outAcc !== '' ? ` (GPS ±${s.outAcc} m)` : ''}`, s.outOutside === true ? 'text-rose-600' : '');
+    row('Check-out location', hasPt(s.outLat, s.outLng) ? 'Open in Google Maps' : '—', '', gmap(s.outLat, s.outLng));
+    row('Check-out face', faceText(s.outFace, s.outFaceScore), faceCls(s.outFace));
+    row('Check-out sent', s.outMode || '—', /offline/i.test(s.outMode) ? 'text-indigo-600' : '');
+  }
+  row('Sheet row', String(s.row), 'text-slate-400');
+
+  renderDetailMap(a, s);
+}
+
+async function loadPhotos(row) {
+  if (photoCache[row]) return photoCache[row];
+  const res = await authed({ action: 'adminPhotos', row });
+  if (!res || !res.ok) throw new Error((res && res.message) || 'Could not load photos.');
+  photoCache[row] = res;
+  return res;
+}
+
+function setTile(frame, p, label) {
+  frame.innerHTML = '';
+  if (p && p.state === 'ok') {
+    const img = el('img', 'w-full h-full object-cover cursor-zoom-in');
+    img.src = p.dataUrl;
+    img.alt = label;
+    img.addEventListener('click', () => { $('viewerTitle').textContent = `${dAgent.name} — ${label}`; $('viewerImg').src = p.dataUrl; $('viewer').classList.remove('hidden'); });
+    frame.append(img);
+  } else {
+    frame.append(el('p', 'text-xs text-slate-400 text-center px-2',
+      !p || p.state === 'none' ? 'No photo' : p.state === 'legacy' ? 'Saved in old system' : 'Could not load'));
+  }
+}
+
+function renderDetailMap(a, s) {
+  if (!HAS_MAP) return;
+  if (!dMap) {
+    dMap = L.map('dMap', { zoomControl: true });
+    L.tileLayer(TILE_URL, TILE_OPTS).addTo(dMap);
+    dLayer = L.layerGroup().addTo(dMap);
+  }
+  dLayer.clearLayers();
+  const pts = [];
+  if (a.lat != null) {
+    L.circle([a.lat, a.lng], { radius: report.settings.radius, color: '#4f46e5', weight: 2, fillOpacity: 0.08, dashArray: '6 6' }).addTo(dLayer);
+    L.marker([a.lat, a.lng], { icon: pinIcon('#4f46e5', '★') }).bindPopup(`<b>Assigned</b><br>${esc(a.location || '')}`).addTo(dLayer);
+    pts.push([a.lat, a.lng]);
+  }
+  if (hasPt(s.inLat, s.inLng)) { L.marker([s.inLat, s.inLng], { icon: pinIcon('#10b981', 'IN') }).addTo(dLayer); pts.push([s.inLat, s.inLng]); }
+  if (!s.open && hasPt(s.outLat, s.outLng)) { L.marker([s.outLat, s.outLng], { icon: pinIcon('#f43f5e', 'OUT') }).addTo(dLayer); pts.push([s.outLat, s.outLng]); }
+  const fit = all => {
+    dMap.invalidateSize();
+    if (all.length > 1) dMap.fitBounds(all, { padding: [40, 40], maxZoom: 17 });
+    else dMap.setView(all[0] || DEFAULT_CENTER, all.length ? 16 : 11);
+  };
+  setTimeout(() => fit(pts), 80);
+  loadTrail(a).then(trail => {
+    if (dAgent !== a) return;
+    const tr = $('trailRow');
+    if (tr) tr.lastChild.textContent = trail.length
+      ? `${trail.length} update${trail.length > 1 ? 's' : ''}, ${trail[0].time}–${trail[trail.length - 1].time}` +
+        (trail.some(t => t.outside === true) ? ` · ${trail.filter(t => t.outside === true).length} outside` : ' · all inside')
+      : 'No live updates (app not kept open)';
+    if (tr && trail.length) tr.lastChild.className = 'font-semibold text-right ' + (trail.some(t => t.outside === true) ? 'text-rose-600' : 'text-emerald-600');
+    if (!trail.length) return;
+    const line = trail.map(t => [t.lat, t.lng]);
+    L.polyline(line, { color: '#64748b', weight: 3, opacity: 0.7, dashArray: '4 6' }).addTo(dLayer);
+    trail.forEach(t => L.circleMarker([t.lat, t.lng], { radius: 5, weight: 2, color: '#fff', fillOpacity: 1,
+      fillColor: t.outside === true ? '#e11d48' : t.outside === false ? '#059669' : '#64748b' })
+      .bindTooltip(`${t.time}${t.dist !== '' ? ' · ' + fmtDist(t.dist) : ''}${t.bat !== '' ? ' · ' + t.bat + '%' : ''}`).addTo(dLayer));
+    fit(pts.concat(line));
+  }).catch(err => {
+    if (err.session) return showLogin(err.message);
+    const tr = $('trailRow'); if (tr) tr.lastChild.textContent = 'Could not load';
+  });
+}
+
+const trailCache = {};
+async function loadTrail(a) {
+  const key = report.date + '|' + a.id;
+  if (trailCache[key] && report.date !== report.today) return trailCache[key];
+  const res = await authed({ action: 'adminTrail', id: a.id, date: report.date });
+  if (!res || !res.ok) throw new Error((res && res.message) || 'Could not load trail.');
+  trailCache[key] = res.points || [];
+  return trailCache[key];
+}
+
+/* ---------- CSV export ---------- */
+function exportCsv() {
+  if (!report) return;
+  const head = ['Date', 'AgentID', 'AgentName', 'State', 'Location', 'AgentStatus', 'DayStatus', 'CheckIn', 'CheckOut', 'Hours',
+                'LateMinutes', 'Late', 'CheckInDistance_m', 'CheckInOutside', 'CheckOutDistance_m', 'CheckOutOutside',
+                'CheckInFace', 'CheckInFaceScore', 'CheckOutFace', 'CheckOutFaceScore', 'CheckInMode', 'CheckOutMode',
+                'LastSeen', 'LastSeenDistance_m', 'LastSeenOutside', 'LastSeenBattery', 'NoSignal'];
+  const lines = [head];
+  visibleAgents().forEach(a => {
+    const base = [report.date, a.id, a.name, a.stateName || '', a.location, a.status, STATE[a.state][0]];
+    const ls = a.lastSeen;
+    const seen = ls ? [ls.time, ls.dist, ls.outside, ls.bat, a.flags.silent] : ['', '', '', '', a.flags.silent];
+    if (!a.shifts.length) { lines.push(base.concat(Array(head.length - base.length - seen.length).fill(''), seen)); return; }
+    a.shifts.forEach(s => lines.push(base.concat([s.inTime, s.outTime, s.hours, s.lateMin, s.late, s.inDist, s.inOutside,
+      s.outDist, s.outOutside, s.inFace, s.inFaceScore, s.outFace, s.outFaceScore, s.inMode, s.outMode], seen)));
+  });
+  const csv = lines.map(r => r.map(v => {
+    const t = String(v == null ? '' : v);
+    return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  }).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const tag = [$('stateFilter').value, $('locFilter').value].filter(v => v && v !== '__none').join('_').replace(/[^\w]+/g, '-');
+  a.download = `attendance_${report.date}${tag ? '_' + tag : ''}${filter !== 'all' ? '_' + filter : ''}.csv`;
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* ---------- Wire up ---------- */
+$('btnPrev').addEventListener('click', () => shiftDay(-1));
+$('btnNext').addEventListener('click', () => shiftDay(1));
+$('btnToday').addEventListener('click', () => loadDay(''));
+$('dateInput').addEventListener('change', () => $('dateInput').value && loadDay($('dateInput').value));
+$('btnRefresh').addEventListener('click', () => loadDay($('dateInput').value));
+$('btnLogout').addEventListener('click', () => { const t = token; showLogin(''); call({ action: 'adminLogout', token: t }).catch(() => {}); });
+$('search').addEventListener('input', () => report && renderList());
+function chooseFilters(state, loc) {
+  store.set('ci_admin_state', state);
+  store.set('ci_admin_loc', loc);
+  filtersChosen = true;
+  try { const u = new URL(location.href); u.searchParams.delete('loc'); u.searchParams.delete('state'); history.replaceState(null, '', u); } catch (e) { /* not allowed in some hosts */ }
+  if (report) render();
+}
+$('stateFilter').addEventListener('change', () => { $('locFilter').value = ''; chooseFilters($('stateFilter').value, ''); });
+$('locFilter').addEventListener('change', () => chooseFilters($('stateFilter').value, $('locFilter').value));
+$('btnClearLoc').addEventListener('click', () => { $('stateFilter').value = ''; $('locFilter').value = ''; chooseFilters('', ''); });
+$('btnExport').addEventListener('click', exportCsv);
+document.querySelectorAll('.vbtn').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+window.addEventListener('resize', () => setView(view));
+$('dClose').addEventListener('click', () => $('detail').classList.add('hidden'));
+$('detail').addEventListener('click', e => { if (e.target === $('detail')) $('detail').classList.add('hidden'); });
+$('viewerClose').addEventListener('click', () => { $('viewer').classList.add('hidden'); $('viewerImg').src = ''; });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('viewer').classList.contains('hidden')) $('viewer').classList.add('hidden');
+  else $('detail').classList.add('hidden');
+});
+// Auto-refresh today's view every 2 minutes
+setInterval(() => { if (token && report && report.date === report.today && document.visibilityState === 'visible') loadDay(report.date); }, 120000);
+
+(function applyBrand() {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(BRAND.primary || '');
+  if (m) document.documentElement.style.setProperty('--brand', [1, 2, 3].map(i => parseInt(m[i], 16)).join(' '));
+  (BRAND.gradient || []).forEach((c, i) => document.documentElement.style.setProperty('--g' + (i + 1), c));
+  const tc = document.querySelector('meta[name=theme-color]');   // Apps Script may remove this tag
+  if (tc) tc.setAttribute('content', (BRAND.gradient && BRAND.gradient[1]) || BRAND.primary);
+  document.title = BRAND.appName + ' — Admin';
+  $('appName').textContent = BRAND.appName;
+  $('hdrName').textContent = BRAND.appName;
+  if (BRAND.logoUrl) ['loginLogo', 'hdrLogo'].forEach(id => {
+    const img = new Image();
+    img.src = BRAND.logoUrl;
+    img.className = 'w-full h-full object-contain bg-white';
+    img.onload = () => { $(id).innerHTML = ''; $(id).append(img); };
+  });
+})();
+
+/* ---------- Installable app (only when hosted outside Apps Script, e.g. GitHub Pages) ---------- */
+if (!IN_GAS && window.isSecureContext && location.protocol !== 'file:') {
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = 'admin.webmanifest';
+  document.head.appendChild(link);
+  const icon = document.createElement('link');
+  icon.rel = 'apple-touch-icon';
+  icon.href = 'admin-192.png';
+  document.head.appendChild(icon);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+window.__adminStarted = true;
+setView('list');
+if (token) { show('app'); loadDay(''); } else showLogin('');
+</script>
+</body>
+</html>

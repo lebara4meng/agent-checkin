@@ -2,7 +2,7 @@
  * Service worker — lets the installed app open without internet.
  * Bump VERSION whenever you upload a new index.html so phones pick up the update.
  */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `shell-${VERSION}`;
 const LIBS = 'libs-v1';           // Tailwind, Leaflet, face models — rarely change
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './maskable-512.png'];
@@ -26,6 +26,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;                 // check-ins (POST) always go to the network
   const url = new URL(req.url);
+  if (url.origin === location.origin && /\/admin[^/]*$/.test(url.pathname)) return;   // admin dashboard: always live
   if (url.hostname.endsWith('google.com') || url.hostname.endsWith('googleusercontent.com')) return;
 
   // The app page: try the network first (fresh version), fall back to the saved copy offline.
