@@ -1,6 +1,6 @@
 {
-  "name": "Agent Check-In",
-  "short_name": "Check-In",
+  "name": "Lebara Agent Locator",
+  "short_name": "Lebara Agent",
   "description": "Field agent check-in and check-out with GPS and photo verification",
   "start_url": "./index.html",
   "scope": "./",
