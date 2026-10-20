@@ -9,7 +9,9 @@ const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192
 const LIB_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(SHELL)
+    .then(c => c.addAll(SHELL_FILES.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -29,7 +31,7 @@ self.addEventListener('fetch', e => {
   // The app page: try the network first (fresh version), fall back to the saved copy offline.
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         const copy = res.clone();
         caches.open(SHELL).then(c => c.put('./index.html', copy));
         return res;
@@ -49,8 +51,14 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Our own files (icons, manifest): cache first.
+  // Our own files (icons, manifest): always try the latest from the server first,
+  // so name/icon changes show up without editing this file; use the saved copy offline.
   if (url.origin === location.origin) {
-    e.respondWith(caches.match(req).then(hit => hit || fetch(req)));
+    e.respondWith(
+      fetch(req, { cache: 'no-cache' }).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(SHELL).then(c => c.put(req, copy)); }
+        return res;
+      }).catch(() => caches.match(req))
+    );
   }
 });
