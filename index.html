@@ -130,6 +130,23 @@
       <p class="text-center text-[11px] text-slate-400 mt-3">Records your live GPS location and a camera photo.</p>
     </section>
 
+    <section id="trackCard" class="hidden bg-white rounded-2xl shadow-sm p-4">
+      <div class="flex items-start gap-3">
+        <span class="relative flex h-3 w-3 mt-1.5 shrink-0">
+          <span id="trackPulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span id="trackDot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+        </span>
+        <div class="flex-1 min-w-0">
+          <p id="trackTitle" class="font-semibold text-sm">Location sharing is on</p>
+          <p id="trackText" class="text-xs text-slate-500 mt-0.5">Open this app at least every 30 minutes during your shift.</p>
+        </div>
+      </div>
+      <label class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-100 text-sm">
+        <span class="text-slate-600">Keep screen on</span>
+        <input id="keepAwake" type="checkbox" class="w-5 h-5 accent-emerald-600">
+      </label>
+    </section>
+
     <section class="grid grid-cols-3 gap-3">
       <div class="bg-white rounded-2xl shadow-sm p-3 text-center">
         <p id="statDays" class="text-2xl font-bold tabular-nums">0</p>
@@ -542,6 +559,7 @@ function render(d, fromCache) {
   renderMissed(d.history || []);
   renderLists(d.history || []);
   renderQueue();
+  updateTracking();
   if (currentTab === 'map') renderBigMap();
 }
 
@@ -953,8 +971,92 @@ async function refresh(quiet) {
   }
 }
 
+/* ---------- Live location while on shift (app open) ---------- */
+let trackTimer = null, wakeLock = null, pinging = false;
+let lastPingAt = Number(store.get('ci_lastping') || 0);
+let lastPingOk = store.get('ci_lastping_ok') !== '0';
+
+const trackEveryMs = () => (((data && data.tracking && data.tracking.every) || 10) * 60000);
+function onShiftNow() {
+  if (!data || !data.agent || !data.agent.active) return false;
+  const t = effectiveToday();
+  return t.state === 'IN';
+}
+
+function updateTracking() {
+  const want = !!token && onShiftNow();
+  $('trackCard').classList.toggle('hidden', !want);
+  if (!want) {
+    if (trackTimer) { clearInterval(trackTimer); trackTimer = null; }
+    releaseWake();
+    return;
+  }
+  if (!trackTimer) trackTimer = setInterval(trackTick, 60000);   // check every minute; send when due
+  holdWake();
+  renderTrack();
+  trackTick();
+}
+
+function trackTick() {
+  if (!token || !onShiftNow() || document.visibilityState !== 'visible') return;
+  if (Date.now() - lastPingAt >= trackEveryMs() - 15000) sendPing();
+  renderTrack();
+}
+
+async function sendPing() {
+  if (pinging || !navigator.onLine || !navigator.geolocation) { renderTrack(); return; }
+  pinging = true;
+  try {
+    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej,
+      { enableHighAccuracy: true, timeout: 25000, maximumAge: 60000 }));
+    let battery = '';
+    try { if (navigator.getBattery) battery = Math.round((await navigator.getBattery()).level * 100); } catch (e) {}
+    const res = await authed({ action: 'ping', lat: pos.coords.latitude, lng: pos.coords.longitude,
+                               accuracy: pos.coords.accuracy, battery });
+    if (res && res.ok) {
+      lastPingAt = Date.now(); lastPingOk = true;
+      store.set('ci_lastping', String(lastPingAt)); store.set('ci_lastping_ok', '1');
+    } else if (res && res.code === 'NOT_ON_SHIFT') {
+      refresh(true);                      // our status is out of date — reload it
+    }
+  } catch (err) {
+    if (err && err.session) { showLogin(err.message); return; }
+    lastPingOk = false; store.set('ci_lastping_ok', '0');
+  } finally {
+    pinging = false;
+    renderTrack();
+  }
+}
+
+function renderTrack() {
+  if ($('trackCard').classList.contains('hidden')) return;
+  const ago = lastPingAt ? Math.round((Date.now() - lastPingAt) / 60000) : null;
+  const offline = !navigator.onLine;
+  const good = !offline && lastPingOk;
+  $('trackDot').className = 'relative inline-flex rounded-full h-3 w-3 ' + (good ? 'bg-emerald-500' : 'bg-amber-500');
+  $('trackPulse').classList.toggle('hidden', !good);
+  $('trackTitle').textContent = offline ? 'No internet — location not being shared'
+    : !lastPingOk ? 'Location could not be sent' : 'Location sharing is on';
+  const when = ago == null ? 'Not sent yet.' : ago < 1 ? 'Last sent just now.' : `Last sent ${ago} min ago.`;
+  const flagMin = (data && data.tracking && data.tracking.flagAfter) || 30;
+  $('trackText').textContent = `${when} Open this app at least every ${flagMin} minutes during your shift so your location is shared.` +
+    (!lastPingOk && !offline ? ' Check that Location is turned on.' : '');
+}
+
+async function holdWake() {
+  if (!$('keepAwake').checked || wakeLock || !('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) { wakeLock = null; }
+}
+function releaseWake() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+
 function logout() {
   const t = token;
+  if (trackTimer) { clearInterval(trackTimer); trackTimer = null; }
+  releaseWake();
+  $('trackCard').classList.add('hidden');
   Object.keys(photoCache).forEach(k => delete photoCache[k]);
   showLogin('');
   if (t) call({ action: 'logout', token: t }).catch(() => {});
@@ -1301,6 +1403,7 @@ $('btnUsePhoto').addEventListener('click', async () => {
     if (!res || !res.ok) throw new Error((res && res.message) || 'The sheet did not confirm the save.');
 
     delete photoCache[res.row];
+    lastPingAt = Date.now(); lastPingOk = true; store.set('ci_lastping', String(lastPingAt)); store.set('ci_lastping_ok', '1');
     render(res);
     showResult(res, photo, acc);
     if (navigator.vibrate) navigator.vibrate(80);
@@ -1434,6 +1537,11 @@ document.querySelectorAll('#mapRange button').forEach(b => b.addEventListener('c
 }));
 
 $('btnSendNow').addEventListener('click', () => flushQueue(true));
+try { $('keepAwake').checked = store.get('ci_keepawake') === '1'; } catch (e) {}   // off unless the agent turns it on
+$('keepAwake').addEventListener('change', () => {
+  store.set('ci_keepawake', $('keepAwake').checked ? '1' : '0');
+  if ($('keepAwake').checked) holdWake(); else releaseWake();
+});
 $('btnQErrClose').addEventListener('click', () => {
   const id = data && data.agent.id;
   store.set('ci_qerr', JSON.stringify(readJSON('ci_qerr', []).filter(e => e.agentId !== id)));
@@ -1444,6 +1552,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !token) return;
   if (Date.now() - lastRefresh > 60000) refresh(true);
   flushQueue();
+  updateTracking();
 });
 
 function updateNet() {
