@@ -1584,6 +1584,10 @@ setInterval(() => flushQueue(), 60000);
 
 /* ---------- Installable app (only when hosted outside Apps Script, e.g. GitHub Pages) ---------- */
 if (!IN_GAS && window.isSecureContext && location.protocol !== 'file:') {
+  // The agent app covers only …/index.html (the admin app has its own area), so use that address.
+  if (location.pathname.endsWith('/')) {
+    try { history.replaceState(null, '', location.pathname + 'index.html' + location.search + location.hash); } catch (e) {}
+  }
   const link = document.createElement('link');
   link.rel = 'manifest';
   link.href = 'manifest.webmanifest';
