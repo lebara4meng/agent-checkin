@@ -1325,7 +1325,7 @@ function showQueued(payload, photo) {
   body.append(
     detailRowEl('Action', isIn ? 'Check-in' : 'Check-out'),
     detailRowEl('Time recorded', lagosTime(payload.capturedAt)),
-    detailRowEl('Location', `Open map (±${Math.round(payload.accuracy)} m)`, `https://www.google.com/maps?q=${payload.lat},${payload.lng}`)
+    detailRowEl('Location', `Open map (±${Math.round(payload.accuracy)} m)`, 'https://www.google.com/maps?q=' + payload.lat + ',' + payload.lng)
   );
   body.append(el('p', 'text-xs text-amber-800 bg-amber-50 rounded-lg p-2.5',
     'Keep the app installed and open it when you have network. Your original time and location are kept.'));
@@ -1459,7 +1459,8 @@ setInterval(() => flushQueue(), 60000);
   const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(BRAND.primary || '');
   if (m) document.documentElement.style.setProperty('--brand', [1, 2, 3].map(i => parseInt(m[i], 16)).join(' '));
   (BRAND.gradient || []).forEach((c, i) => document.documentElement.style.setProperty('--g' + (i + 1), c));
-  document.querySelector('meta[name=theme-color]').setAttribute('content', (BRAND.gradient && BRAND.gradient[1]) || BRAND.primary);
+  const tc = document.querySelector('meta[name=theme-color]');   // Apps Script may remove this tag
+  if (tc) tc.setAttribute('content', (BRAND.gradient && BRAND.gradient[1]) || BRAND.primary);
   document.title = BRAND.appName;
   $('appName').textContent = BRAND.appName;
   $('appTag').textContent = BRAND.tagline;
