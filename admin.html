@@ -16,7 +16,8 @@
     .bg-grad { background-color: var(--g2); background-image: linear-gradient(110deg, var(--g1) 0%, var(--g2) 55%, var(--g3) 100%); }
     /* White page: give white cards a soft outline so they still stand out */
     #appView .bg-white.rounded-2xl, #appView .bg-white.rounded-3xl { border: 1px solid #e9ecf3; }
-    body { -webkit-tap-highlight-color: transparent; }
+    body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+    html { -webkit-text-size-adjust: 100%; }
     .spinner { width: 40px; height: 40px; border: 4px solid rgba(15,23,42,.12); border-top-color: rgb(var(--brand)); border-radius: 50%; animation: spin .8s linear infinite; }
     .spinner-sm { width: 22px; height: 22px; border: 3px solid rgba(15,23,42,.12); border-top-color: #0f172a; border-radius: 50%; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -83,7 +84,7 @@
   <main class="max-w-7xl mx-auto p-4 space-y-4">
     <div class="flex flex-wrap items-baseline justify-between gap-2">
       <h1 id="dayTitle" class="text-xl font-bold"></h1>
-      <p id="settingsLine" class="text-xs text-slate-500"></p>
+      <p id="settingsLine" class="text-[11px] sm:text-xs text-slate-500"></p>
     </div>
 
     <div id="locBanner" class="hidden flex items-center justify-between gap-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-2xl px-4 py-2.5 text-sm">
@@ -95,7 +96,7 @@
     </div>
 
     <!-- Summary tiles (click to filter) -->
-    <section id="tiles" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-11 gap-2.5"></section>
+    <section id="tiles" class="grid grid-cols-4 lg:grid-cols-11 gap-2 sm:gap-2.5"></section>
 
     <!-- Missed check-outs -->
     <details id="missedBox" class="hidden bg-amber-50 border border-amber-200 rounded-2xl">
@@ -120,8 +121,8 @@
     <p id="filterLine" class="text-xs text-slate-500 px-1 -mt-2"></p>
 
     <!-- List + map -->
-    <section class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 items-start">
-      <div id="listPane" class="space-y-2"></div>
+    <section class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 items-start">
+      <div id="listPane" class="space-y-2 min-w-0"></div>
       <div id="mapPane" class="hidden lg:block lg:sticky lg:top-24">
         <div id="map" class="w-full rounded-2xl shadow-sm overflow-hidden" style="height: calc(100vh - 140px); min-height: 380px;"></div>
         <div class="flex flex-wrap gap-3 text-xs mt-2 px-1 text-slate-600">
@@ -429,9 +430,9 @@ function render() {
   const tiles = $('tiles');
   tiles.innerHTML = '';
   TILES.forEach(([key, label, fn, color]) => {
-    const b = el('button', 'tile bg-white rounded-2xl shadow-sm p-3 text-left active:scale-[.98] transition' + (filter === key ? ' on' : ''));
+    const b = el('button', 'tile bg-white rounded-xl sm:rounded-2xl shadow-sm p-2 sm:p-3 text-left active:scale-[.98] transition min-w-0' + (filter === key ? ' on' : ''));
     b.type = 'button';
-    b.append(el('p', 'text-2xl font-bold tabular-nums ' + color, String(fn(sum))), el('p', 'text-[11px] text-slate-500 leading-tight', label));
+    b.append(el('p', 'text-xl sm:text-2xl font-bold tabular-nums ' + color, String(fn(sum))), el('p', 'text-[10px] sm:text-[11px] text-slate-500 leading-tight', label));
     b.addEventListener('click', () => { filter = filter === key ? 'all' : key; render(); });
     tiles.append(b);
   });
@@ -541,15 +542,15 @@ function renderList() {
   }
   list.forEach(a => {
     const s = a.shifts[0], last = a.shifts[a.shifts.length - 1];
-    const card = el('button', 'w-full text-left bg-white rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[.995] transition');
+    const card = el('button', 'w-full min-w-0 overflow-hidden text-left bg-white rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[.995] transition');
     card.type = 'button';
 
     const av = el('div', 'w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600 overflow-hidden shrink-0', initials(a.name));
     if (a.photo) { const img = new Image(); img.className = 'w-full h-full object-cover'; img.referrerPolicy = 'no-referrer'; img.onload = () => { av.textContent = ''; av.append(img); }; img.src = a.photo; }
 
     const mid = el('div', 'flex-1 min-w-0');
-    const top = el('div', 'flex items-center gap-2 min-w-0');
-    top.append(el('p', 'font-semibold truncate', a.name), el('span', 'text-xs text-slate-400 shrink-0', a.id));
+    const top = el('div', 'flex items-baseline gap-x-2 flex-wrap min-w-0');
+    top.append(el('p', 'font-semibold leading-snug break-words min-w-0', a.name), el('span', 'text-xs text-slate-400 shrink-0', a.id));
     const sub = el('p', 'text-xs text-slate-500 truncate', [a.location || 'No assigned location', a.stateName ? a.stateName + (a.stateGuess ? ' (est.)' : '') : ''].filter(Boolean).join(' · '));
     const flags = el('div', 'flex flex-wrap gap-1 mt-1');
     if (a.flags.late && s) flags.append(badge(`Late ${s.lateMin}m`, 'bg-amber-100 text-amber-800'));
