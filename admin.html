@@ -207,7 +207,7 @@
 /* =========================================================================
  *  CONFIG — keep these the same as in Index.html
  * ======================================================================= */
-const API_URL = 'https://script.google.com/macros/s/AKfycbysnppk5O7SjNXeev9X-PshXKceiHgD89uLbq76z8cqd80ZWEtbI9gFa0m8d_J0Ye0U/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbysnppk5O7SjNXeev9X-PshXKceiHgD89uLbq76z8cqd80ZWEtbI9gFa0m8d_J0Ye0U/exec';   // only needed if this page is hosted outside Apps Script
 const BRAND = {
   appName: 'Lebara Agent Locator',
   primary: '#242EE0',
@@ -370,7 +370,7 @@ const TILES = [
   ['outside', 'Outside assigned zone', s => s.outside, 'text-rose-600'],
   ['offline', 'Sent offline', s => s.offline, 'text-indigo-600'],
   ['outsideNow', 'Outside assigned location', s => s.outsideNow, 'text-rose-600'],
-  ['silent', 'No signal', s => s.silent, 'text-amber-600']
+  ['silent', 'No signal', s => s.noSignal, 'text-amber-600']
 ];
 
 const FILTERS = {
@@ -383,7 +383,7 @@ const FILTERS = {
   outside: a => a.flags.outside,
   offline: a => a.flags.offline,
   outsideNow: a => a.flags.outsideNow,
-  silent: a => a.flags.silent
+  silent: a => a.flags.silent || a.flags.signalGaps
 };
 
 function render() {
@@ -453,8 +453,9 @@ function render() {
 
 /** Same counts as the server, but for whatever agents are passed in (used for the location view). */
 function summarize(list) {
-  const s = { agents: 0, checkedIn: 0, onShift: 0, done: 0, absent: 0, late: 0, outside: 0, offline: 0, inactive: 0, outsideNow: 0, silent: 0 };
+  const s = { agents: 0, checkedIn: 0, onShift: 0, done: 0, absent: 0, late: 0, outside: 0, offline: 0, inactive: 0, outsideNow: 0, silent: 0, noSignal: 0 };
   list.forEach(a => {
+    if (a.flags.silent || a.flags.signalGaps) s.noSignal++;
     if (a.active) { s.agents++; if (!a.shifts.length) s.absent++; } else s.inactive++;
     if (a.shifts.length) s.checkedIn++;
     if (a.state === 'ON_SHIFT') s.onShift++;
@@ -487,6 +488,21 @@ function visibleAgents() {
     .filter(a => !st || (st === '__none' ? !a.stateName : a.stateName === st))
     .filter(a => !loc || a.location === loc)
     .filter(a => !q || a.name.toLowerCase().includes(q) || String(a.id).toLowerCase().includes(q));
+}
+
+const fmtMins = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}` : `${m} min`;
+const zoneTxt = (outside, dist) => outside === true ? `outside (${fmtDist(dist)})` : outside === false ? `inside (${fmtDist(dist)})` : 'zone unknown';
+
+/** "No signal 2× · 1 h 55 min" — earlier no-signal periods today (the live one is shown by the Last seen chip). */
+function signalChip(a) {
+  const g = a.signal;
+  if (!g || !g.count) return null;
+  const earlier = g.gaps.filter(x => !x.ongoing);
+  if (!earlier.length) return null;
+  const mins = earlier.reduce((t, x) => t + x.minutes, 0);
+  const c = badge(`No signal ${earlier.length}× · ${fmtMins(mins)}`, 'bg-amber-100 text-amber-800');
+  c.title = earlier.map(x => `${x.from}–${x.to} (${fmtMins(x.minutes)}), back ${zoneTxt(x.backOutside, x.backDist)}`).join('\n');
+  return c;
 }
 
 function badge(text, cls) { return el('span', 'text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap ' + cls, text); }
@@ -558,6 +574,8 @@ function renderList() {
       if (!last.open) flags.append(zoneChip('Out', last.outOutside, last.outDist, a.lat != null));
     }
     if (a.flags.offline) flags.append(badge('Offline', 'bg-indigo-100 text-indigo-700'));
+    const sig = signalChip(a);
+    if (sig) flags.append(sig);
     if (a.shifts.length > 1) flags.append(badge(`${a.shifts.length} shifts`, 'bg-slate-100 text-slate-600'));
     mid.append(top, sub);
     if (flags.childNodes.length) mid.append(flags);
@@ -716,6 +734,7 @@ function renderShift() {
   trailRow.append(el('span', 'text-slate-500', 'Live trail'), el('span', 'font-semibold text-right text-slate-400', 'Loading…'));
   trailRow.id = 'trailRow';
   facts.append(trailRow);
+  signalRows(a, facts, row);
   row('Check-in time', s.inTime || '—');
   row('Arrival', s.lateMin === '' ? '—' : s.late ? `Late — ${s.lateMin} min after ${report.settings.closes}` : s.early ? `Early — before ${report.settings.opens}` : 'On time', s.late ? 'text-amber-600' : s.early ? 'text-sky-600' : 'text-emerald-600');
   row('Check-in distance', a.lat == null ? 'No assigned location' : `${fmtDist(s.inDist)} ${s.inOutside === true ? '— OUTSIDE' : '— inside'}${s.inAcc !== '' ? ` (GPS ±${s.inAcc} m)` : ''}`, s.inOutside === true ? 'text-rose-600' : '', '');
@@ -731,6 +750,34 @@ function renderShift() {
   row('Sheet row', String(s.row), 'text-slate-400');
 
   renderDetailMap(a, s);
+}
+
+/** Signal history: when the agent last opened the app, where, and every no-signal period of the day. */
+function signalRows(a, facts, row) {
+  const g = a.signal;
+  if (!g || !g.lastOpen) return;
+  const lo = g.lastOpen;
+  row('Last opened app', `${lo.time} · ${a.lat == null ? 'no assigned location' : zoneTxt(lo.outside, lo.dist)}` + (lo.src === 'Check-in' ? ' (at check-in)' : ''),
+      lo.outside === true ? 'text-rose-600' : lo.outside === false ? 'text-emerald-600' : '');
+  if (g.opens > 1) row('Times app opened', `${g.opens}` + (g.opensOutside ? ` · ${g.opensOutside} outside the zone` : ' · all inside the zone'),
+      g.opensOutside ? 'text-rose-600' : '');
+  if (!g.count) {
+    row('No signal', `None — no gap over ${report.settings.silentAfter} min`, 'text-emerald-600');
+    return;
+  }
+  row('No signal', `${g.count} time${g.count > 1 ? 's' : ''} · ${fmtMins(g.totalMin)} in total · longest ${fmtMins(g.longestMin)}`, 'text-amber-600');
+  g.gaps.forEach(x => {
+    const r = el('div', 'flex justify-between gap-4 px-4 py-2');
+    r.style.paddingLeft = '2rem'; r.style.background = '#fffbeb';
+    r.append(el('span', 'text-slate-600 font-mono text-xs pt-0.5 whitespace-nowrap shrink-0', `${x.from} → ${x.ongoing ? 'now' : x.to}`));
+    const v = el('span', 'text-right text-xs');
+    v.append(el('span', 'font-semibold text-amber-700', `${fmtMins(x.minutes)} without signal`));
+    if (x.ongoing) v.append(el('span', 'block text-amber-700', 'Still no signal'));
+    else v.append(el('span', 'block ' + (x.backOutside === true ? 'text-rose-600 font-semibold' : 'text-slate-500'),
+      `${x.backSrc === 'Check-out' ? 'Next seen at check-out' : 'Opened app again'} ${x.to} · ${a.lat == null ? '' : zoneTxt(x.backOutside, x.backDist)}`));
+    r.append(v);
+    facts.append(r);
+  });
 }
 
 async function loadPhotos(row) {
@@ -814,12 +861,17 @@ function exportCsv() {
   const head = ['Date', 'AgentID', 'AgentName', 'State', 'Location', 'AgentStatus', 'DayStatus', 'CheckIn', 'CheckOut', 'Hours',
                 'LateMinutes', 'Late', 'CheckInDistance_m', 'CheckInOutside', 'CheckOutDistance_m', 'CheckOutOutside',
                 'CheckInMode', 'CheckOutMode',
-                'LastSeen', 'LastSeenDistance_m', 'LastSeenOutside', 'LastSeenBattery', 'NoSignal'];
+                'LastSeen', 'LastSeenDistance_m', 'LastSeenOutside', 'LastSeenBattery', 'NoSignal',
+                'LastAppOpen', 'LastAppOpenOutside', 'TimesAppOpened', 'NoSignalPeriods', 'NoSignalMinutes',
+                'LongestNoSignalMin', 'NoSignalDetail'];
   const lines = [head];
   visibleAgents().forEach(a => {
     const base = [report.date, a.id, a.name, a.stateName || '', a.location, a.status, STATE[a.state][0]];
     const ls = a.lastSeen;
-    const seen = ls ? [ls.time, ls.dist, ls.outside, ls.bat, a.flags.silent] : ['', '', '', '', a.flags.silent];
+    const g = a.signal || { gaps: [] };
+    const seen = (ls ? [ls.time, ls.dist, ls.outside, ls.bat, a.flags.silent] : ['', '', '', '', a.flags.silent]).concat([
+      g.lastOpen ? g.lastOpen.time : '', g.lastOpen ? g.lastOpen.outside : '', g.opens || '', g.count || 0, g.totalMin || 0, g.longestMin || 0,
+      g.gaps.map(x => `${x.from}-${x.ongoing ? 'now' : x.to} ${x.minutes}min${x.ongoing ? '' : ' back ' + (x.backOutside === true ? 'outside' : x.backOutside === false ? 'inside' : '?')}`).join('; ')]);
     if (!a.shifts.length) { lines.push(base.concat(Array(head.length - base.length - seen.length).fill(''), seen)); return; }
     a.shifts.forEach(s => lines.push(base.concat([s.inTime, s.outTime, s.hours, s.lateMin, s.late, s.inDist, s.inOutside,
       s.outDist, s.outOutside, s.inMode, s.outMode], seen)));
