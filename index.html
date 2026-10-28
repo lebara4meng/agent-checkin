@@ -243,7 +243,7 @@
 <!-- Boot screen -->
 <div id="bootView" class="fixed inset-0 bg-grad flex items-center justify-center z-[900]"><div class="spinner"></div></div>
 
-<!-- Hidden native camera input — front camera (selfie) for face verification -->
+<!-- Hidden native camera input — front camera (selfie); admins compare it with the reference photo -->
 <input id="camera" type="file" accept="image/*" capture="user" class="hidden">
 
 <!-- Photo confirm -->
@@ -337,11 +337,6 @@ const BRAND = {
   logoUrl: ''                                      // optional: https link to a square PNG/SVG logo
 };
 
-/* Automatic face matching is OFF — admins compare the check-in/out selfie with the reference photo.
-   (Set to true to bring back the on-phone face check; it downloads ~7 MB of face data per phone.) */
-const FACE_CHECK = false;
-const FACE_LIB = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1/dist/face-api.js';
-const FACE_MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1/model/';
 
 const PHOTO_MAX_CHARS = 45000;
 const PHOTO_MAX_DIM = 720;
@@ -525,7 +520,6 @@ async function submitPin() {
     warmUpLocation();
     updateNet();
     flushQueue();
-    setTimeout(loadFaceModels, 3000);
   } catch (err) {
     pin = '';
     renderDots();
@@ -1129,79 +1123,6 @@ async function compressPhoto(src, lines) {
   return out;
 }
 
-/* ---------- Face verification ---------- */
-let facePromise = null;
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.async = true;
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('Could not load ' + src));
-    document.head.appendChild(s);
-  });
-}
-
-/** Downloads the face models once (about 7 MB; the phone keeps them cached afterwards). */
-function loadFaceModels() {
-  if (!FACE_CHECK) return Promise.resolve(false);
-  if (facePromise) return facePromise;
-  facePromise = (async () => {
-    try {
-      if (typeof faceapi === 'undefined') await loadScript(FACE_LIB);
-      // Use the phone's graphics chip (WebGL); fall back to plain CPU. (The WASM engine's files aren't published.)
-      let backend = '';
-      for (const be of ['webgl', 'cpu']) {
-        try { if (await faceapi.tf.setBackend(be)) { await faceapi.tf.ready(); backend = be; break; } } catch (e) { /* try next */ }
-      }
-      if (!backend) throw new Error('No face engine available on this device');
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS),
-        faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODELS),
-        faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODELS)
-      ]);
-      return true;
-    } catch (e) {
-      console.warn('Face check unavailable:', e);
-      facePromise = null;   // try again next time
-      return false;
-    }
-  })();
-  return facePromise;
-}
-
-const withTimeout = (p, ms, fallback) => Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
-
-function scaledCanvas(img, maxDim) {
-  const s = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.naturalWidth * s);
-  c.height = Math.round(img.naturalHeight * s);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return c;
-}
-
-/** → {status:'ok', descriptor:[128]} | {status:'noface'} | {status:'unavailable'} */
-async function analyzeFace(img) {
-  if (!FACE_CHECK) return { status: 'unavailable' };
-  const ready = await withTimeout(loadFaceModels(), 20000, false);
-  if (!ready) return { status: 'unavailable' };
-  try {
-    const canvas = scaledCanvas(img, 640);
-    const det = await withTimeout(
-      faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.45 }))
-        .withFaceLandmarks(true).withFaceDescriptor(),
-      20000, 'timeout');
-    if (det === 'timeout') return { status: 'unavailable' };
-    if (!det) return { status: 'noface' };
-    return { status: 'ok', descriptor: Array.from(det.descriptor) };
-  } catch (e) {
-    console.warn('Face analysis failed:', e);
-    return { status: 'unavailable' };
-  }
-}
-
 /* ---------- Offline queue ---------- */
 const lagosDate = ms => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
 const lagosTime = ms => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ms));
@@ -1316,8 +1237,7 @@ function startAction(action) {
   // GPS starts at the exact moment of the tap; the camera opens alongside it.
   const geo = getPosition();
   geo.catch(() => {});
-  pending = { action, geo, at: Date.now(), attempts: 0 };
-  loadFaceModels();   // make sure models are on their way
+  pending = { action, geo, at: Date.now() };
   openCamera();
 }
 
@@ -1333,10 +1253,7 @@ function showConfirm(job, warning) {
   $('confirmWarn').classList.toggle('hidden', !warning);
   $('confirmWarn').textContent = warning || '';
   const use = $('btnUsePhoto');
-  const blocked = warning && job.attempts < 2;
-  use.classList.toggle('hidden', !!blocked);
-  $('btnRetake').classList.toggle('col-span-2', !!blocked);
-  use.textContent = warning ? 'Continue anyway' : 'Use photo';
+  use.textContent = 'Use photo';
   $('confirm').classList.remove('hidden');
 }
 
@@ -1346,8 +1263,6 @@ $('camera').addEventListener('change', () => {
   if (pending.url) URL.revokeObjectURL(pending.url);
   pending.file = file;
   pending.url = URL.createObjectURL(file);
-  pending.face = null;
-  pending.warned = false;
   showConfirm(pending, '');
 });
 
@@ -1360,29 +1275,9 @@ $('btnUsePhoto').addEventListener('click', async () => {
   busy = true;
   const a = data.agent;
   try {
-    const img = await loadImage(job.url);
-
-    // 1) Face check — the agent must be visible. After two failed tries they may continue (flagged for admin).
-    if (job.warned) {
-      job.face = { status: 'noface' };
-    } else if (!job.face) {
-      showBusy('Checking your photo…');
-      const face = await analyzeFace(img);
-      if (face.status === 'noface') {
-        job.attempts++;
-        job.warned = job.attempts >= 2;
-        hideBusy();
-        busy = false;
-        showConfirm(job, job.attempts >= 2
-          ? 'Still no clear face. Retake, or continue and your supervisor will review it.'
-          : 'We could not see your face clearly. Please retake the photo facing the camera in good light.');
-        return;
-      }
-      job.face = face;
-    }
     pending = null;
 
-    // 2) GPS — use the fix from the tap; take a fresh one if it failed or is over 2 minutes old.
+    // 1) GPS — use the fix from the tap; take a fresh one if it failed or is over 2 minutes old.
     showBusy('Getting an accurate GPS location… (stand outside or near a window if this takes long)');
     let pos;
     try {
@@ -1391,7 +1286,7 @@ $('btnUsePhoto').addEventListener('click', async () => {
     } catch (first) { pos = await getPosition(); }
     const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
 
-    // 3) Photo with stamp
+    // 2) Photo with stamp
     showBusy('Processing photo…');
     const photo = await compressPhoto(job.url, [
       `${a.name} (${a.id}) • ${job.action}`,
@@ -1400,8 +1295,8 @@ $('btnUsePhoto').addEventListener('click', async () => {
     ]);
     URL.revokeObjectURL(job.url);
 
-    // 4) Send — or keep on the phone if there's no internet
-    const payload = { action: job.action, lat, lng, accuracy: acc, photo, face: job.face, capturedAt: job.at };
+    // 3) Send — or keep on the phone if there's no internet
+    const payload = { action: job.action, lat, lng, accuracy: acc, photo, capturedAt: job.at };
     showBusy(job.action === 'Check-In' ? 'Saving your check-in…' : 'Saving your check-out…');
     let res;
     try {
@@ -1500,7 +1395,7 @@ function showResult(res, photo, acc) {
   }
   body.append(detailRowEl('Location', `Open map (±${Math.round(acc)} m)`, res.locationLink));
   if (res.refPhotoSaved) {
-    body.append(el('p', 'text-xs text-indigo-700 bg-indigo-50 rounded-lg p-2.5', 'This photo has been saved as your reference face photo.'));
+    body.append(el('p', 'text-xs text-indigo-700 bg-indigo-50 rounded-lg p-2.5', 'This photo has been saved as your reference photo.'));
   }
   $('resPhoto').src = photo;
   $('resPhoto').classList.remove('hidden');
@@ -1632,7 +1527,6 @@ setInterval(tick, 1000);
     setTab('home');
     warmUpLocation();
     updateNet();
-    setTimeout(loadFaceModels, 3000);
   } catch (err) {
     // No network: open with the last saved data so the agent can still check in/out (saved on the phone).
     const cached = readJSON('ci_last', null);

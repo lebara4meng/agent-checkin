@@ -96,7 +96,7 @@
     </div>
 
     <!-- Summary tiles (click to filter) -->
-    <section id="tiles" class="grid grid-cols-4 lg:grid-cols-11 gap-2 sm:gap-2.5"></section>
+    <section id="tiles" class="grid grid-cols-4 lg:grid-cols-10 gap-2 sm:gap-2.5"></section>
 
     <!-- Missed check-outs -->
     <details id="missedBox" class="hidden bg-amber-50 border border-amber-200 rounded-2xl">
@@ -158,6 +158,7 @@
       <div id="dShiftTabs" class="flex gap-2 flex-wrap"></div>
       <div id="dEmpty" class="hidden bg-white rounded-2xl p-6 text-center text-sm text-slate-500"></div>
       <div id="dBody" class="space-y-4">
+        <p class="text-xs text-slate-500 -mb-2">Compare the check-in and check-out photos with the reference photo. Tap a photo to enlarge it.</p>
         <div class="grid grid-cols-3 gap-3" id="dPhotos"></div>
         <div id="dMap" class="w-full h-64 rounded-2xl overflow-hidden shadow-sm"></div>
         <div id="dFacts" class="bg-white rounded-2xl shadow-sm divide-y divide-slate-100 text-sm"></div>
@@ -366,10 +367,9 @@ const TILES = [
   ['done', 'Checked out', s => s.done, 'text-sky-600'],
   ['absent', 'Absent', s => s.absent, 'text-slate-500'],
   ['late', 'Late', s => s.late, 'text-amber-600'],
-  ['outside', 'Outside zone', s => s.outside, 'text-rose-600'],
-  ['face', 'Face issue', s => s.face, 'text-rose-600'],
+  ['outside', 'Outside assigned zone', s => s.outside, 'text-rose-600'],
   ['offline', 'Sent offline', s => s.offline, 'text-indigo-600'],
-  ['outsideNow', 'Outside now', s => s.outsideNow, 'text-rose-600'],
+  ['outsideNow', 'Outside assigned location', s => s.outsideNow, 'text-rose-600'],
   ['silent', 'No signal', s => s.silent, 'text-amber-600']
 ];
 
@@ -381,7 +381,6 @@ const FILTERS = {
   absent:  a => a.state === 'ABSENT',
   late:    a => a.flags.late,
   outside: a => a.flags.outside,
-  face:    a => a.flags.face,
   offline: a => a.flags.offline,
   outsideNow: a => a.flags.outsideNow,
   silent: a => a.flags.silent
@@ -390,7 +389,7 @@ const FILTERS = {
 function render() {
   const r = report;
   $('dayTitle').textContent = fmtDate(r.date) + (r.date === r.today ? ' (today)' : '');
-  $('settingsLine').textContent = `Zone radius ${r.settings.radius} m · Check-in window ${r.settings.opens}–${r.settings.closes} · Face threshold ${r.settings.faceThreshold}` +
+  $('settingsLine').textContent = `Zone radius ${r.settings.radius} m · Check-in window ${r.settings.opens}–${r.settings.closes}` +
     (r.settings.pingEvery ? ` · Live location every ${r.settings.pingEvery} min (no signal after ${r.settings.silentAfter} min)` : '');
 
   // State filter: all 36 states + FCT, with agent counts (kept on this device, or ?state= in the link)
@@ -454,13 +453,13 @@ function render() {
 
 /** Same counts as the server, but for whatever agents are passed in (used for the location view). */
 function summarize(list) {
-  const s = { agents: 0, checkedIn: 0, onShift: 0, done: 0, absent: 0, late: 0, outside: 0, face: 0, offline: 0, inactive: 0, outsideNow: 0, silent: 0 };
+  const s = { agents: 0, checkedIn: 0, onShift: 0, done: 0, absent: 0, late: 0, outside: 0, offline: 0, inactive: 0, outsideNow: 0, silent: 0 };
   list.forEach(a => {
     if (a.active) { s.agents++; if (!a.shifts.length) s.absent++; } else s.inactive++;
     if (a.shifts.length) s.checkedIn++;
     if (a.state === 'ON_SHIFT') s.onShift++;
     if (a.state === 'DONE') s.done++;
-    ['late', 'outside', 'face', 'offline', 'outsideNow', 'silent'].forEach(k => { if (a.flags[k]) s[k]++; });
+    ['late', 'outside', 'offline', 'outsideNow', 'silent'].forEach(k => { if (a.flags[k]) s[k]++; });
   });
   return s;
 }
@@ -558,7 +557,6 @@ function renderList() {
       flags.append(zoneChip('In', last.inOutside, last.inDist, a.lat != null));
       if (!last.open) flags.append(zoneChip('Out', last.outOutside, last.outDist, a.lat != null));
     }
-    if (a.flags.face) flags.append(badge('Face check', 'bg-rose-100 text-rose-700'));
     if (a.flags.offline) flags.append(badge('Offline', 'bg-indigo-100 text-indigo-700'));
     if (a.shifts.length > 1) flags.append(badge(`${a.shifts.length} shifts`, 'bg-slate-100 text-slate-600'));
     mid.append(top, sub);
@@ -599,7 +597,7 @@ function renderMap(list) {
   list.forEach(a => {
     const s = a.shifts[a.shifts.length - 1];
     if (s && hasPt(s.inLat, s.inLng)) {
-      const flagged = a.flags.late || a.flags.outside || a.flags.face || a.flags.outsideNow;
+      const flagged = a.flags.late || a.flags.outside || a.flags.outsideNow;
       const color = a.flags.silent ? '#f59e0b' : flagged ? '#f43f5e' : a.state === 'ON_SHIFT' ? '#10b981' : '#0ea5e9';
       const ls = a.lastSeen;
       const pos = ls && hasPt(ls.lat, ls.lng) ? [ls.lat, ls.lng]
@@ -703,8 +701,6 @@ function renderShift() {
     r.append(el('span', 'text-slate-500', label), v);
     facts.append(r);
   };
-  const faceText = (m, sc) => m === 'TRUE' ? `Match (${sc})` : m === 'FALSE' ? `NO MATCH (${sc})` : (m || '—');
-  const faceCls = m => m === 'TRUE' ? 'text-emerald-600' : (m === 'FALSE' || m === 'No face') ? 'text-rose-600' : 'text-slate-500';
   const gmap = (lat, lng) => hasPt(lat, lng) ? 'https://www.google.com/maps?q=' + lat + ',' + lng : '';
 
   const ls = a.lastSeen;
@@ -724,14 +720,12 @@ function renderShift() {
   row('Arrival', s.lateMin === '' ? '—' : s.late ? `Late — ${s.lateMin} min after ${report.settings.closes}` : s.early ? `Early — before ${report.settings.opens}` : 'On time', s.late ? 'text-amber-600' : s.early ? 'text-sky-600' : 'text-emerald-600');
   row('Check-in distance', a.lat == null ? 'No assigned location' : `${fmtDist(s.inDist)} ${s.inOutside === true ? '— OUTSIDE' : '— inside'}${s.inAcc !== '' ? ` (GPS ±${s.inAcc} m)` : ''}`, s.inOutside === true ? 'text-rose-600' : '', '');
   row('Check-in location', hasPt(s.inLat, s.inLng) ? 'Open in Google Maps' : '—', '', gmap(s.inLat, s.inLng));
-  row('Check-in face', faceText(s.inFace, s.inFaceScore), faceCls(s.inFace));
   row('Check-in sent', s.inMode || '—', /offline/i.test(s.inMode) ? 'text-indigo-600' : '');
   row('Check-out time', s.open ? (s.missed ? 'No check-out recorded' : 'Still on shift') : s.outTime, s.missed ? 'text-amber-600' : '');
   if (!s.open) {
     row('Hours worked', fmtHours(s.hours) || '—');
     row('Check-out distance', a.lat == null ? 'No assigned location' : `${fmtDist(s.outDist)} ${s.outOutside === true ? '— OUTSIDE' : '— inside'}${s.outAcc !== '' ? ` (GPS ±${s.outAcc} m)` : ''}`, s.outOutside === true ? 'text-rose-600' : '');
     row('Check-out location', hasPt(s.outLat, s.outLng) ? 'Open in Google Maps' : '—', '', gmap(s.outLat, s.outLng));
-    row('Check-out face', faceText(s.outFace, s.outFaceScore), faceCls(s.outFace));
     row('Check-out sent', s.outMode || '—', /offline/i.test(s.outMode) ? 'text-indigo-600' : '');
   }
   row('Sheet row', String(s.row), 'text-slate-400');
@@ -819,7 +813,7 @@ function exportCsv() {
   if (!report) return;
   const head = ['Date', 'AgentID', 'AgentName', 'State', 'Location', 'AgentStatus', 'DayStatus', 'CheckIn', 'CheckOut', 'Hours',
                 'LateMinutes', 'Late', 'CheckInDistance_m', 'CheckInOutside', 'CheckOutDistance_m', 'CheckOutOutside',
-                'CheckInFace', 'CheckInFaceScore', 'CheckOutFace', 'CheckOutFaceScore', 'CheckInMode', 'CheckOutMode',
+                'CheckInMode', 'CheckOutMode',
                 'LastSeen', 'LastSeenDistance_m', 'LastSeenOutside', 'LastSeenBattery', 'NoSignal'];
   const lines = [head];
   visibleAgents().forEach(a => {
@@ -828,7 +822,7 @@ function exportCsv() {
     const seen = ls ? [ls.time, ls.dist, ls.outside, ls.bat, a.flags.silent] : ['', '', '', '', a.flags.silent];
     if (!a.shifts.length) { lines.push(base.concat(Array(head.length - base.length - seen.length).fill(''), seen)); return; }
     a.shifts.forEach(s => lines.push(base.concat([s.inTime, s.outTime, s.hours, s.lateMin, s.late, s.inDist, s.inOutside,
-      s.outDist, s.outOutside, s.inFace, s.inFaceScore, s.outFace, s.outFaceScore, s.inMode, s.outMode], seen)));
+      s.outDist, s.outOutside, s.inMode, s.outMode], seen)));
   });
   const csv = lines.map(r => r.map(v => {
     const t = String(v == null ? '' : v);

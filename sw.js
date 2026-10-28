@@ -2,9 +2,9 @@
  * Service worker — lets the installed app open without internet.
  * Bump VERSION whenever you upload a new index.html so phones pick up the update.
  */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL = `shell-${VERSION}`;
-const LIBS = 'libs-v1';           // Tailwind, Leaflet, face models — rarely change
+const LIBS = 'libs-v1';           // Tailwind, Leaflet — rarely change
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './maskable-512.png'];
 const LIB_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];
 
