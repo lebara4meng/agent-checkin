@@ -28,6 +28,61 @@
     .leaflet-container { font: inherit; background: #e2e8f0; }
     .leaflet-control-attribution { font-size: 9px !important; }
     .tile.on { outline: 3px solid rgb(var(--brand)); outline-offset: -3px; }
+    /* Profile editor */
+    [class*="ed-"].hidden { display: none !important; }
+    .ed-wrap { position: fixed; inset: 0; z-index: 1050; background: rgba(15,23,42,.6); display: flex; align-items: flex-end; justify-content: center; }
+    @media (min-width: 640px) { .ed-wrap { align-items: center; padding: 24px; } }
+    .ed-panel { background: #f8fafc; width: 100%; max-width: 520px; max-height: 94vh; display: flex; flex-direction: column; overflow: hidden; border-radius: 24px 24px 0 0; box-shadow: 0 20px 50px rgba(15,23,42,.35); }
+    @media (min-width: 640px) { .ed-panel { border-radius: 24px; } }
+    .ed-head { background: #fff; padding: 14px 18px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f1f5f9; }
+    .ed-title { font-weight: 700; font-size: 17px; color: #0f172a; line-height: 1.2; }
+    .ed-sub { font-size: 13px; color: #64748b; overflow-wrap: anywhere; }
+    .ed-x { margin-left: auto; width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; font-size: 20px; line-height: 1; flex: 0 0 auto; }
+    .ed-body { overflow-y: auto; padding: 14px 16px; flex: 1; }
+    .ed-card { background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.08); padding: 14px; margin-bottom: 12px; }
+    .ed-sec { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: #94a3b8; text-transform: uppercase; }
+    .ed-lbl { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin: 12px 0 5px; }
+    .ed-lbl b { color: #e11d48; }
+    .ed-in { width: 100%; border: 1.5px solid #e2e8f0; border-radius: 11px; padding: 10px 11px; font-size: 15px; color: #0f172a; background: #fff; outline: none; }
+    .ed-in:focus { border-color: rgb(var(--brand)); }
+    .ed-in.bad { border-color: #fda4af; background: #fff1f2; }
+    .ed-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
+    .ed-hint { font-size: 12px; color: #64748b; margin-top: 6px; }
+    .ed-hint.good { color: #047857; font-weight: 600; }
+    .ed-hint.err { color: #be123c; font-weight: 600; }
+    .ed-seg { display: flex; background: #f1f5f9; border-radius: 11px; padding: 3px; }
+    .ed-seg button { flex: 1; padding: 8px; border-radius: 9px; font-size: 13px; font-weight: 600; color: #64748b; }
+    .ed-seg button.on { background: #fff; color: #047857; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+    .ed-seg button.on.off { color: #be123c; }
+    .ed-chip { font-size: 12.5px; font-weight: 600; color: #3730a3; background: #eef2ff; border-radius: 10px; padding: 8px 10px; text-align: center; flex: 1; }
+    .ed-chip:disabled { opacity: .45; }
+    .ed-chip.on { background: #3730a3; color: #fff; }
+    .ed-row { display: flex; gap: 8px; margin-top: 10px; }
+    .ed-geo { font-size: 12.5px; border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+    .ed-geo.ok { background: #f0fdf4; color: #065f46; }
+    .ed-geo.warn { background: #fffbeb; color: #92400e; }
+    .ed-geo.bad { background: #fff1f2; color: #9f1239; }
+    .ed-geo.wait { background: #f1f5f9; color: #475569; }
+    #edMap { height: 190px; border-radius: 12px; margin-top: 10px; overflow: hidden; }
+    .ed-note { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: #475569; }
+    .ed-note + .ed-note { margin-top: 10px; }
+    .ed-ico { width: 30px; height: 30px; border-radius: 9px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .ed-foot { display: flex; gap: 8px; padding: 12px 16px; background: #fff; border-top: 1px solid #f1f5f9; }
+    .ed-btn { flex: 1; border-radius: 12px; padding: 12px; font-weight: 600; font-size: 15px; }
+    .ed-btn.pri { background: linear-gradient(90deg, #E100B5, #0D1157 55%, #242EE0); color: #fff; }
+    .ed-btn.sec { background: #fff; border: 1.5px solid #c7d2fe; color: #3730a3; }
+    .ed-btn:disabled { opacity: .5; }
+    .ed-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; padding: 9px 0; border-bottom: 1px solid #f1f5f9; }
+    .ed-kv:last-child { border-bottom: 0; }
+    .ed-kv > span:first-child { color: #64748b; flex: 0 0 auto; }
+    .ed-kv > span:last-child { font-weight: 600; text-align: right; color: #0f172a; overflow-wrap: anywhere; }
+    .ed-old { color: #e11d48; text-decoration: line-through; font-weight: 500; }
+    .ed-new { color: #059669; }
+    .ed-ok { background: #ecfdf5; color: #065f46; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; font-weight: 600; margin-bottom: 12px; }
+    .ed-errbox { background: #fff1f2; color: #9f1239; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; font-weight: 600; margin-bottom: 12px; }
+    .ed-pin { text-align: center; background: linear-gradient(135deg, #fdf4ff, #eef2ff); border: 1.5px dashed #a5b4fc; border-radius: 14px; padding: 16px; }
+    .ed-pin .d { font-size: 38px; font-weight: 800; letter-spacing: .35em; padding-left: .35em; color: #1e1b4b; font-family: ui-monospace, Menlo, monospace; }
+    .ed-pin .t { font-size: 12.5px; color: #4338ca; font-weight: 600; }
   </style>
 </head>
 <body class="bg-white text-slate-800 antialiased min-h-screen">
@@ -113,6 +168,9 @@
         <button type="button" data-view="list" class="vbtn px-3 py-1.5 rounded-lg text-sm font-semibold">List</button>
         <button type="button" data-view="map" class="vbtn px-3 py-1.5 rounded-lg text-sm font-semibold">Map</button>
       </div>
+      <button id="btnNewAgent" type="button" class="flex items-center gap-1.5 bg-white border-2 border-brand/40 text-brand text-sm font-semibold rounded-xl px-3 py-2 active:opacity-90">
+        <span class="text-lg leading-none">+</span> New agent
+      </button>
       <button id="btnExport" type="button" class="flex items-center gap-1.5 bg-grad text-white text-sm font-semibold rounded-xl px-3 py-2 active:opacity-90">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
         Export CSV
@@ -152,6 +210,7 @@
         <p id="dName" class="text-lg font-bold leading-tight"></p>
         <p id="dSub" class="text-sm text-slate-500"></p>
       </div>
+      <button id="dEdit" type="button" class="h-9 px-3 rounded-xl bg-grad text-white text-sm font-semibold shrink-0">✎ Edit</button>
       <button id="dClose" type="button" class="w-9 h-9 rounded-full bg-slate-100 text-xl leading-none shrink-0" aria-label="Close">&times;</button>
     </div>
     <div class="overflow-y-auto p-4 space-y-4">
@@ -163,6 +222,79 @@
         <div id="dMap" class="w-full h-64 rounded-2xl overflow-hidden shadow-sm"></div>
         <div id="dFacts" class="bg-white rounded-2xl shadow-sm divide-y divide-slate-100 text-sm"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Profile editor: edit an agent / add a new agent (saves to the Agents sheet) -->
+<div id="editor" class="ed-wrap hidden">
+  <div class="ed-panel slide-up">
+    <div class="ed-head">
+      <div style="min-width:0"><p id="edTitle" class="ed-title">Edit profile</p><p id="edSub" class="ed-sub"></p></div>
+      <button id="edClose" type="button" class="ed-x" aria-label="Close">&times;</button>
+    </div>
+
+    <!-- Step 1: form -->
+    <div id="edForm" class="ed-body">
+      <div id="edFormErr" class="ed-errbox hidden"></div>
+      <div class="ed-card">
+        <p class="ed-sec">Agent</p>
+        <label class="ed-lbl" for="edId">Agent ID <b>*</b></label>
+        <input id="edId" class="ed-in ed-mono" autocomplete="off" spellcheck="false" maxlength="60">
+        <p id="edIdHint" class="ed-hint"></p>
+        <label class="ed-lbl" for="edName">Full name <b>*</b></label>
+        <input id="edName" class="ed-in" autocomplete="off" placeholder="e.g. Chiamaka Nwosu" maxlength="80">
+        <span class="ed-lbl">Status</span>
+        <div class="ed-seg" id="edStatus"><button type="button" data-v="Active">Active</button><button type="button" data-v="Inactive">Inactive</button></div>
+      </div>
+      <div class="ed-card">
+        <p class="ed-sec">Where they work</p>
+        <label class="ed-lbl" for="edLoc">Assigned location name <b>*</b></label>
+        <input id="edLoc" class="ed-in" autocomplete="off" placeholder="e.g. Shoprite, Lekki Phase 1" maxlength="120">
+        <label class="ed-lbl" for="edState">State <b>*</b></label>
+        <select id="edState" class="ed-in"></select>
+        <div id="edGeo" class="ed-geo wait hidden"></div>
+        <div id="edMap"></div>
+        <p class="ed-hint">Not the right spot? Drag the pin, or tap the map where the agent works.</p>
+        <div class="ed-row">
+          <button id="edFind" type="button" class="ed-chip">Find on map</button>
+          <button id="edUseIn" type="button" class="ed-chip">Use check-in spot</button>
+        </div>
+      </div>
+      <div class="ed-card">
+        <p class="ed-sec">Sign-in &amp; photo</p>
+        <div id="edPinNew" class="ed-note" style="margin-top:10px"><div class="ed-ico">🔑</div><div><b>PIN</b> — created automatically when you save, never the same as another agent's.</div></div>
+        <div id="edPinEdit" class="hidden" style="margin-top:10px">
+          <div class="ed-note"><div class="ed-ico">🔑</div><div style="flex:1"><b>PIN</b> — hidden. If the agent forgot it, give them a new one.</div></div>
+          <div class="ed-row"><button id="edNewPin" type="button" class="ed-chip">Give new PIN</button></div>
+          <p id="edPinHint" class="ed-hint hidden"></p>
+        </div>
+        <div id="edRefNew" class="ed-note"><div class="ed-ico">📷</div><div><b>Reference photo</b> — the agent's first check-in selfie becomes it.</div></div>
+        <div id="edRefEdit" class="hidden">
+          <span class="ed-lbl">Reference photo</span>
+          <div class="ed-seg" id="edRef"><button type="button" data-v="keep">Keep</button><button type="button" data-v="checkin">Use check-in selfie</button><button type="button" data-v="clear">Clear</button></div>
+          <p id="edRefHint" class="ed-hint"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: review -->
+    <div id="edReview" class="ed-body hidden">
+      <div id="edSaveErr" class="ed-errbox hidden"></div>
+      <div class="ed-card" id="edDiff"></div>
+      <div class="ed-card">
+        <label class="ed-lbl" for="edAdmin" style="margin-top:0">Your name (for the change log) <b>*</b></label>
+        <input id="edAdmin" class="ed-in" autocomplete="name" placeholder="e.g. Tunde – Lagos supervisor" maxlength="60">
+        <p class="ed-hint">Every change is recorded on the "Profile changes" tab of the sheet.</p>
+      </div>
+    </div>
+
+    <!-- Step 3: done -->
+    <div id="edDone" class="ed-body hidden"></div>
+
+    <div class="ed-foot">
+      <button id="edBack" type="button" class="ed-btn sec">Cancel</button>
+      <button id="edNext" type="button" class="ed-btn pri">Review &amp; save</button>
     </div>
   </div>
 </div>
@@ -854,6 +986,337 @@ async function loadTrail(a) {
   trailCache[key] = res.points || [];
   return trailCache[key];
 }
+
+/* ---------- Profile editor (edit an agent / add a new agent) ---------- */
+const AGENT_APP_URL = 'https://lebara4meng.github.io/agent-checkin/';
+const ID_PREFIX = 'DTML/LEB/';
+const idKey = v => String(v == null ? '' : v).replace(/\s+/g, '').toLowerCase();
+let ed = null, edMap = null, edMarker = null, edCircle = null, edGeoTimer = null, edGeoSeq = 0;
+
+/** Next free ID: DTML/LEB/<this year>/<highest number + 1>, same number of digits as existing IDs. */
+function nextAgentId() {
+  const year = (report && report.today ? report.today : isoOf(new Date())).slice(0, 4);
+  const pre = ID_PREFIX + year + '/';
+  let max = 0, width = 0;
+  (report ? report.agents : []).forEach(a => {
+    const m = String(a.id).replace(/\s+/g, '').match(/^DTML\/LEB\/(\d{4})\/(\d+)$/i);
+    if (m && m[1] === year) { max = Math.max(max, parseInt(m[2], 10)); width = Math.max(width, m[2].length); }
+  });
+  width = width || 4;
+  let n = max + 1, id;
+  do { id = pre + String(n).padStart(width, '0'); n++; } while (idTaken(id));
+  return id;
+}
+function idTaken(id) {
+  const k = idKey(id);
+  return !!k && (report ? report.agents : []).some(a => idKey(a.id) === k && (!ed || !ed.a || idKey(a.id) !== idKey(ed.a.id)));
+}
+
+function edShift() {        // the check-in shown in the detail view (for "use check-in spot / selfie")
+  if (!ed || !ed.a || !ed.a.shifts.length) return null;
+  const s = ed.a.shifts[Math.min(dIndex, ed.a.shifts.length - 1)];
+  return s && hasPt(s.inLat, s.inLng) ? s : null;
+}
+
+function openEditor(mode, a) {
+  ed = { mode, a: a || null, step: 'form', status: 'Active', ref: 'keep', newPin: false,
+         lat: null, lng: null, address: '', approx: false, how: '', geoState: '' };
+  const isNew = mode === 'new';
+  $('edTitle').textContent = isNew ? 'New agent' : 'Edit profile';
+  $('edSub').textContent = isNew ? 'Adds a row to the Agents sheet' : `${a.id} · saves to the Agents sheet`;
+  ed.suggested = isNew ? nextAgentId() : '';
+  $('edId').value = isNew ? ed.suggested : a.id;
+  $('edName').value = isNew ? '' : a.name;
+  $('edLoc').value = isNew ? '' : (a.location || '');
+  const sel = $('edState');
+  sel.innerHTML = '';
+  sel.append(new Option('Choose a state…', ''));
+  (report.states || []).forEach(st => sel.append(new Option(st, st)));
+  sel.value = isNew ? (($('stateFilter').value && $('stateFilter').value !== '__none') ? $('stateFilter').value : '') : (a.stateName || '');
+  ed.status = isNew ? 'Active' : (a.active ? 'Active' : 'Inactive');
+  if (!isNew && a.lat != null) { ed.lat = a.lat; ed.lng = a.lng; ed.how = 'current'; }
+  ed.orig = isNew ? null : { id: a.id, name: a.name, status: ed.status, location: a.location || '', state: a.stateGuess ? '' : (a.stateName || ''), lat: a.lat, lng: a.lng };
+
+  $('edPinNew').classList.toggle('hidden', !isNew);
+  $('edPinEdit').classList.toggle('hidden', isNew);
+  $('edRefNew').classList.toggle('hidden', !isNew);
+  $('edRefEdit').classList.toggle('hidden', isNew);
+  const s = edShift();
+  $('edUseIn').disabled = !s;
+  $('edUseIn').title = s ? '' : 'No check-in on the date you are viewing';
+  $('edUseIn').classList.toggle('hidden', isNew);
+  $('edRef').querySelector('[data-v=checkin]').disabled = !s;
+  $('edFormErr').classList.add('hidden');
+  $('edGeo').classList.add('hidden');
+  edSeg(); edPinUi(); edRefUi(); edIdCheck();
+  edStep('form');
+  $('editor').classList.remove('hidden');
+  setTimeout(() => { edMapInit(); edMapShow(); if (isNew) $('edName').focus(); }, 60);
+}
+
+function edStep(step) {
+  ed.step = step;
+  $('edForm').classList.toggle('hidden', step !== 'form');
+  $('edReview').classList.toggle('hidden', step !== 'review');
+  $('edDone').classList.toggle('hidden', step !== 'done');
+  const back = $('edBack'), next = $('edNext');
+  back.disabled = next.disabled = false;
+  if (step === 'form') { back.textContent = 'Cancel'; next.textContent = 'Review & save'; }
+  if (step === 'review') { back.textContent = 'Back'; next.textContent = ed.mode === 'new' ? 'Add agent' : 'Save changes'; }
+  if (step === 'done') { back.textContent = ed.mode === 'new' ? 'Add another' : 'Close'; next.textContent = ed.mode === 'new' ? 'Close' : 'Done'; }
+  $('edBack').classList.toggle('hidden', step === 'done' && ed.mode !== 'new');
+}
+
+function edSeg() {
+  $('edStatus').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === ed.status); b.classList.toggle('off', b.dataset.v === 'Inactive'); });
+}
+function edPinUi() {
+  $('edNewPin').classList.toggle('on', ed.newPin);
+  $('edNewPin').textContent = ed.newPin ? '✓ New PIN on save (tap to undo)' : 'Give new PIN';
+  $('edPinHint').classList.toggle('hidden', !ed.newPin);
+  $('edPinHint').textContent = 'A new PIN will be created when you save and shown to you once. The old PIN stops working.';
+}
+function edRefUi() {
+  $('edRef').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === ed.ref));
+  const s = edShift();
+  $('edRefHint').textContent = ed.ref === 'checkin' ? `The check-in selfie from ${fmtDate(report.date, { day: 'numeric', month: 'short' })} at ${hm(s.inTime)} becomes the reference photo.`
+    : ed.ref === 'clear' ? 'The reference photo is removed. The agent\'s next check-in selfie becomes the new one.'
+    : (ed.a && ed.a.photo ? 'The current reference photo stays.' : 'No reference photo yet — the next check-in selfie becomes it.');
+}
+function edIdCheck() {
+  const v = $('edId').value.trim(), h = $('edIdHint'), inp = $('edId');
+  let bad = false;
+  if (!v) { h.className = 'ed-hint err'; h.textContent = 'Enter the Agent ID.'; bad = true; }
+  else if (idTaken(v)) { h.className = 'ed-hint err'; h.textContent = '✕ This Agent ID is already used by another agent.'; bad = true; }
+  else if (ed.mode === 'new' && idKey(v) === idKey(ed.suggested)) { h.className = 'ed-hint good'; h.textContent = '✓ Suggested: next free ID. Type over it to use the agent\'s official ID.'; }
+  else if (ed.mode === 'edit' && idKey(v) !== idKey(ed.orig.id)) { h.className = 'ed-hint'; h.style.color = '#92400e'; h.textContent = 'Changing the ID also moves all past check-ins and location history to the new ID. The agent will need to sign in again.'; return !bad; }
+  else { h.className = 'ed-hint'; h.textContent = ''; }
+  h.style.color = '';
+  inp.classList.toggle('bad', bad);
+  return !bad;
+}
+
+/* --- map + Google Maps lookup --- */
+function edMapInit() {
+  if (!HAS_MAP || edMap) return;
+  edMap = L.map('edMap', { zoomControl: true }).setView(DEFAULT_CENTER, 11);
+  L.tileLayer(TILE_URL, TILE_OPTS).addTo(edMap);
+  edMap.on('click', e => edSetPoint(e.latlng.lat, e.latlng.lng, 'hand'));
+}
+function edMapShow() {
+  if (!edMap) return;
+  edMap.invalidateSize();
+  if (edMarker) { edMarker.remove(); edMarker = null; }
+  if (edCircle) { edCircle.remove(); edCircle = null; }
+  if (ed.lat == null) { edMap.setView(DEFAULT_CENTER, 10); return; }
+  edCircle = L.circle([ed.lat, ed.lng], { radius: report.settings.radius, color: '#4f46e5', weight: 2, fillOpacity: 0.08, dashArray: '6 6' }).addTo(edMap);
+  edMarker = L.marker([ed.lat, ed.lng], { draggable: true, icon: pinIcon('#4f46e5', '★') }).addTo(edMap);
+  edMarker.on('dragend', () => { const p = edMarker.getLatLng(); edSetPoint(p.lat, p.lng, 'hand'); });
+  edMap.setView([ed.lat, ed.lng], 16);
+}
+function edSetPoint(lat, lng, how, extra) {
+  ed.lat = Math.round(lat * 1e6) / 1e6; ed.lng = Math.round(lng * 1e6) / 1e6; ed.how = how;
+  ed.address = extra && extra.address || (how === 'hand' ? 'Placed by hand on the map' : how === 'checkin' ? 'Agent\'s check-in spot' : '');
+  ed.approx = !!(extra && extra.approx);
+  if (how === 'hand' || how === 'checkin') edGeoBox('ok', `📍 <b>${how === 'hand' ? 'Pin placed by hand' : 'Using the check-in spot'}:</b> ${ed.lat.toFixed(6)}, ${ed.lng.toFixed(6)}`);
+  edMapShow();
+}
+function edGeoBox(kind, html) {
+  const b = $('edGeo');
+  b.className = 'ed-geo ' + kind;
+  b.innerHTML = html;
+}
+function edEsc(t) { return esc(String(t == null ? '' : t)); }
+async function edLookup(force) {
+  const place = $('edLoc').value.trim(), st = $('edState').value;
+  if (place.length < 3) return;
+  if (!force && ed.mode === 'edit' && place === ed.orig.location) return;   // name unchanged: keep the current pin
+  const seq = ++edGeoSeq;
+  edGeoBox('wait', 'Looking up "' + edEsc(place) + '" on Google Maps…');
+  try {
+    const r = await authed({ action: 'adminGeocode', place, state: st });
+    if (seq !== edGeoSeq || !ed) return;
+    if (!r || !r.ok) throw new Error((r && r.message) || 'Lookup failed');
+    if (!r.found) {
+      ed.lookupFailed = true;
+      edGeoBox('bad', '✕ <b>Not found on Google Maps.</b> Make the name more specific (add the street or area), or tap the map where the agent works.');
+      return;
+    }
+    ed.lookupFailed = false;
+    ed.lookedUp = place + '|' + (st || r.state || '');
+    edSetPoint(r.lat, r.lng, 'google', { address: r.address, approx: !r.precise });
+    if (!st && r.state) $('edState').value = r.state;
+    edGeoBox(r.precise ? 'ok' : 'warn', (r.precise ? '📍 <b>Found on Google Maps:</b> ' : '⚠ <b>Approximate — check the pin.</b> Google found: ') +
+      edEsc(r.address) + '<br>' + r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) + (r.state ? ' · state ' + edEsc(r.state) : ''));
+  } catch (err) {
+    if (err.session) return showLogin(err.message);
+    if (seq === edGeoSeq) edGeoBox('bad', 'Could not reach Google Maps (' + edEsc(err.message) + '). Tap the map to place the pin.');
+  }
+}
+function edLookupSoon() { clearTimeout(edGeoTimer); edGeoTimer = setTimeout(() => edLookup(false), 900); }
+
+/* --- review --- */
+function edValues() {
+  return { id: $('edId').value.trim().replace(/\s+/g, ' ').replace(/\s*\/\s*/g, '/'), name: $('edName').value.trim().replace(/\s+/g, ' '),
+           status: ed.status, location: $('edLoc').value.trim().replace(/\s+/g, ' '), state: $('edState').value, lat: ed.lat, lng: ed.lng };
+}
+function edValidate() {
+  const v = edValues(), err = [];
+  if (!edIdCheck()) err.push('Fix the Agent ID.');
+  if (!v.name) err.push('Enter the agent\'s full name.');
+  if (!v.location) err.push('Enter the assigned location name.');
+  if (!v.state) err.push('Choose the state.');
+  if (ed.lookupFailed && ed.how !== 'hand') err.push('The location was not found on Google Maps. Make the name more specific, or tap the map where the agent works.');
+  else if (v.lat == null) err.push('Set the location on the map: make the location name more specific, or tap the map.');
+  return err;
+}
+async function edReview() {
+  // A location typed but not yet looked up: look it up first, so the saved pin matches the name.
+  const v0 = edValues();
+  const pending = v0.location && !ed.lookupFailed && (ed.mode === 'new' ? ed.lat == null || ed.how === 'google' && ed.lookedUp !== v0.location + '|' + v0.state
+                                                                       : v0.location !== ed.orig.location && ed.how === 'current');
+  if (pending) { clearTimeout(edGeoTimer); $('edNext').disabled = true; await edLookup(true); if (!ed) return; $('edNext').disabled = false; }
+  const err = edValidate();
+  const box = $('edFormErr');
+  box.classList.toggle('hidden', !err.length);
+  box.innerHTML = err.map(edEsc).join('<br>');
+  if (err.length) { $('edForm').scrollTop = 0; return; }
+  const v = edValues(), o = ed.orig, isNew = ed.mode === 'new';
+  const d = $('edDiff');
+  d.innerHTML = '';
+  const kv = (label, html) => { const r = el('div', 'ed-kv'); r.append(el('span', '', label)); const x = el('span'); x.innerHTML = html; r.append(x); d.append(r); };
+  const chg = (a, b) => `<span class="ed-old">${edEsc(a || '—')}</span> → <span class="ed-new">${edEsc(b || '—')}</span>`;
+  const coord = `${v.lat.toFixed(6)}, ${v.lng.toFixed(6)}<br><span style="font-weight:500;font-size:12px;color:${ed.approx ? '#92400e' : '#047857'}">${ed.approx ? 'approximate — check the pin' : ed.how === 'hand' ? 'placed by hand' : ed.how === 'checkin' ? 'check-in spot' : 'exact match'}</span>`;
+  let n = 0;
+  if (isNew) {
+    kv('Agent ID', edEsc(v.id)); kv('Name', edEsc(v.name)); kv('Status', `<span style="color:${v.status === 'Active' ? '#047857' : '#be123c'}">${v.status}</span>`);
+    kv('Location', edEsc(v.location)); kv('State', edEsc(v.state)); kv('Coordinates', coord); kv('PIN', 'Created when you save');
+    n = 1;
+  } else {
+    if (idKey(v.id) !== idKey(o.id) || v.id !== o.id) { kv('Agent ID', chg(o.id, v.id) + '<br><span style="font-weight:500;font-size:12px;color:#92400e">Past check-ins and location history move to the new ID</span>'); n++; }
+    if (v.name !== o.name) { kv('Name', chg(o.name, v.name)); n++; }
+    if (v.status !== o.status) { kv('Status', chg(o.status, v.status)); n++; }
+    if (v.location !== o.location) { kv('Location', chg(o.location, v.location)); n++; }
+    if (v.state !== o.state) { kv('State', chg(o.state || 'not set', v.state)); n++; }
+    if (o.lat == null || Math.abs(v.lat - o.lat) > 1e-6 || Math.abs(v.lng - o.lng) > 1e-6) {
+      const moved = o.lat == null ? '' : ` <span style="font-weight:500;color:#64748b">(moved ${fmtDist(edDist(o.lat, o.lng, v.lat, v.lng))})</span>`;
+      kv('Coordinates', (o.lat == null ? '' : `<span class="ed-old">${o.lat}, ${o.lng}</span> → `) + coord + moved); n++;
+    }
+    if (ed.newPin) { kv('PIN', '<span class="ed-new">New PIN — shown once after saving</span>'); n++; }
+    if (ed.ref !== 'keep') { kv('Reference photo', ed.ref === 'clear' ? '<span class="ed-old">Cleared</span> — next selfie becomes it' : '<span class="ed-new">Check-in selfie</span>'); n++; }
+  }
+  if (!n) { box.classList.remove('hidden'); box.textContent = 'Nothing has changed yet.'; return; }
+  $('edAdmin').value = store.get('ci_admin_name') || '';
+  $('edSaveErr').classList.add('hidden');
+  edStep('review');
+  if (!$('edAdmin').value) $('edAdmin').focus();
+}
+function edDist(a, b, c, d2) {
+  const R = 6371000, r = Math.PI / 180, x = (c - a) * r, y = (d2 - b) * r;
+  const h = Math.sin(x / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(y / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+}
+
+/* --- save --- */
+async function edSave() {
+  const adminName = $('edAdmin').value.trim();
+  const errBox = $('edSaveErr');
+  if (!adminName) { errBox.classList.remove('hidden'); errBox.textContent = 'Enter your name for the change log.'; $('edAdmin').focus(); return; }
+  store.set('ci_admin_name', adminName);
+  const v = edValues(), s = edShift();
+  const payload = Object.assign({ action: 'adminSaveAgent', mode: ed.mode, originalId: ed.a ? ed.a.id : '', adminName,
+    address: ed.address, approx: ed.approx, newPin: ed.newPin, refPhoto: ed.ref, refRow: ed.ref === 'checkin' && s ? s.row : '' }, v);
+  $('edNext').disabled = $('edBack').disabled = true;
+  $('edNext').textContent = 'Saving…';
+  try {
+    const r = await authed(payload);
+    if (!r || !r.ok) {
+      edStep('review');
+      errBox.classList.remove('hidden');
+      errBox.textContent = (r && r.message) || 'Could not save.';
+      if (r && r.field) { edStep('form'); $('edFormErr').classList.remove('hidden'); $('edFormErr').textContent = r.message; if (r.field === 'id') edIdCheck(); }
+      return;
+    }
+    edDoneScreen(r);
+    if (dAgent) $('detail').classList.add('hidden');
+    loadDay(report.date);
+  } catch (err) {
+    if (err.session) return showLogin(err.message);
+    edStep('review');
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Could not save: ' + err.message;
+  }
+}
+function edDoneScreen(r) {
+  const box = $('edDone');
+  box.innerHTML = '';
+  $('edTitle').textContent = r.mode === 'new' ? 'Agent added' : 'Profile saved';
+  $('edSub').textContent = `${r.id} · ${r.name}`;
+  box.append(el('div', 'ed-ok', `✓ Saved to the Agents sheet (row ${r.row}) · recorded on "Profile changes"`));
+  if (r.moved) box.append(el('div', 'ed-ok', `✓ Agent ID changed — ${r.moved.checkIns} check-in${r.moved.checkIns === 1 ? '' : 's'} and ${r.moved.locationUpdates} location update${r.moved.locationUpdates === 1 ? '' : 's'} moved to the new ID. The agent must sign in again.`));
+  if (r.pin) {
+    const card = el('div', 'ed-card');
+    const pinBox = el('div', 'ed-pin');
+    pinBox.append(el('p', 't', 'Agent\'s PIN'), el('p', 'd', r.pin), el('p', 't', 'Give this to the agent now — it won\'t be shown again.'));
+    const copy = el('button', 'ed-chip', 'Copy login details');
+    copy.type = 'button';
+    copy.style.marginTop = '10px';
+    copy.style.flex = '0 0 auto';
+    const text = 'Lebara Agent Locator\nApp: ' + AGENT_APP_URL + '\nAgent ID: ' + r.id + '\nPIN: ' + r.pin + '\nKeep your PIN private.';
+    copy.addEventListener('click', () => edCopy(text, copy));
+    pinBox.append(copy);
+    card.append(pinBox, el('p', 'ed-hint', 'The copied text has the app link, Agent ID and PIN — ready to paste into WhatsApp.'));
+    box.append(card);
+  } else if (r.changes && r.changes.length) {
+    const card = el('div', 'ed-card');
+    r.changes.forEach(c => { const k = el('div', 'ed-kv'); k.append(el('span', '', c.field), el('span', '', c.now)); card.append(k); });
+    box.append(card);
+  }
+  ed.saved = r;
+  edStep('done');
+}
+function edCopy(text, btn) {
+  const done = () => { btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = 'Copy login details'; }, 2000); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => fallback());
+  else fallback();
+  function fallback() {
+    const t = el('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.append(t);
+    t.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed — write the PIN down', 'error'); } t.remove();
+  }
+}
+function edClose() {
+  if (ed && ed.step === 'done' && ed.saved && ed.saved.pin && !ed.pinAck) {
+    ed.pinAck = true;
+    toast('Make sure you have given the agent the PIN — tap ✕ again to close');
+    return;
+  }
+  $('editor').classList.add('hidden');
+  ed = null;
+}
+
+$('btnNewAgent').addEventListener('click', () => report && openEditor('new'));
+$('dEdit').addEventListener('click', () => dAgent && openEditor('edit', dAgent));
+$('edClose').addEventListener('click', edClose);
+$('edBack').addEventListener('click', () => {
+  if (!ed) return;
+  if (ed.step === 'form') edClose();
+  else if (ed.step === 'review') edStep('form');
+  else if (ed.step === 'done' && ed.mode === 'new') { ed.pinAck = true; $('editor').classList.add('hidden'); openEditor('new'); }
+});
+$('edNext').addEventListener('click', () => {
+  if (!ed) return;
+  if (ed.step === 'form') edReview();
+  else if (ed.step === 'review') edSave();
+  else { ed.pinAck = true; edClose(); }
+});
+$('edStatus').addEventListener('click', e => { const b = e.target.closest('button'); if (b && ed) { ed.status = b.dataset.v; edSeg(); } });
+$('edRef').addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled && ed) { ed.ref = b.dataset.v; edRefUi(); } });
+$('edNewPin').addEventListener('click', () => { if (ed) { ed.newPin = !ed.newPin; edPinUi(); } });
+$('edId').addEventListener('input', () => ed && edIdCheck());
+$('edLoc').addEventListener('input', () => { if (ed) { ed.lookupFailed = false; edLookupSoon(); } });
+$('edState').addEventListener('change', () => { if (ed && (ed.mode === 'new' || $('edLoc').value.trim() !== ed.orig.location)) edLookup(false); });
+$('edFind').addEventListener('click', () => ed && edLookup(true));
+$('edUseIn').addEventListener('click', () => { const s = edShift(); if (s) edSetPoint(s.inLat, s.inLng, 'checkin'); });
 
 /* ---------- CSV export ---------- */
 function exportCsv() {
